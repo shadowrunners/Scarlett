@@ -19,15 +19,7 @@ const instance = axios.create({
       'Content-Type': 'application/json; charset=UTF-8',
       'User-Agent': 'Deezer/8.32.0.2 (iOS; 14.4; Mobile; en; iPhone10_5)',
     },
-    params: {
-      version: '8.32.0',
-      output: 3,
-      input: 3,
-      buildId: 'ios12_universal',
-      screenHeight: '480',
-      screenWidth: '320',
-      lang: 'en',
-    },
+    params: {},
 });
 
 export class Manager {
@@ -35,6 +27,7 @@ export class Manager {
     private privateAPI: string;
     private publicAPI: string;
     public options: Options;
+    public players = new Map();
 
     constructor(options: Options) {
         this.options = options;
@@ -44,8 +37,16 @@ export class Manager {
     }
 
     public create(options: PlayerOptions) {
-        const player = new Player(options, this);
+        let player = this.players.get(options.guildId);
+
+        if (!player) player = this.createPlayer(options);
         return player;
+    }
+
+    private createPlayer(options: PlayerOptions) {
+        const player = new Player(options, this);
+        this.players.set(options.guildId, player);
+        return player; 
     }
 
     private async fetchSongData(query: string) {
