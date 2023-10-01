@@ -24,19 +24,23 @@ export class Player {
         this.player = createAudioPlayer();
 
         this.connection.subscribe(this.player);
+
+        this.player.on('stateChange', (_oldState, newState) => {
+            // Play the next track if the queue isn't empty and if the old state was "Buffering".
+            if (_oldState.status === AudioPlayerStatus.Playing && newState.status === AudioPlayerStatus.Idle && this.queue.length) this.play();
+        })
     }
 
     /** Plays the currently enqueued track. */
     public play() {
         if (!this.queue.length) return;
+        if (this.player.state.status === AudioPlayerStatus.Buffering || this.player.state.status === AudioPlayerStatus.Paused) return;
         this.queue.current = this.queue.shift();
 
         this.audioResource = createAudioResource(this.queue.current.stream);
-
-        console.log(this.queue);
-        // Play the song only if the player isn't paused or is currently playing.
-        if (this.player.state.status !== AudioPlayerStatus.Paused && this.player.state.status !== AudioPlayerStatus.Playing) 
-            return this.player.play(this.audioResource);
+        
+        this.player.play(this.audioResource);
+        this.isPlaying = true;
     }
 
     /** Plays the previous track. */
@@ -61,6 +65,12 @@ export class Player {
     public resume(): boolean {
         if (this.player.state.status !== AudioPlayerStatus.Paused) return;
         return this.player.unpause();
+    }
+
+    /** Skips the currently playing track. */
+    public skip() { 
+        this.player.stop(true);
+        this.play();
     }
 
     /** Destroys the player (connection). */
