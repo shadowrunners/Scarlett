@@ -2,6 +2,9 @@ import { Blowfish } from 'egoroof-blowfish'
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import axios from 'axios';
+import Queue from './Queue';
+import { Track } from './Track';
+import { Player, PlayerOptions } from './Player';
 
 
 const instance = axios.create({
@@ -38,6 +41,11 @@ export class Manager {
         this.publicAPI = 'https://api.deezer.com';
         this.privateAPI = 'https://www.deezer.com/ajax/gw-light.php';
         this.decryptionKey = this.options.sources.deezer.masterKey;
+    }
+
+    public create(options: PlayerOptions) {
+        const player = new Player(options, this);
+        return player;
     }
 
     private async fetchSongData(query: string) {
@@ -149,7 +157,10 @@ export class Manager {
 
     public async resolve(options: ResolveOptions) {
         const song = await this.fetchSongData(options.query);
-        return await this.fetchMediaURL(song.id);
+        const media = await this.fetchMediaURL(song.id);
+        const track = new Track(song, media);
+
+        return track;
     }
 }
 
@@ -165,6 +176,8 @@ interface QueryResponse {
     data: {
         id: string;
         title: string;
+        link: string;
+        md5_image: string;
     }[];
 }
 
