@@ -27,7 +27,8 @@ export class Player {
 
         this.player.on('stateChange', (_oldState, newState) => {
             // Play the next track if the queue isn't empty and if the old state was "Buffering".
-            if (_oldState.status === AudioPlayerStatus.Playing && newState.status === AudioPlayerStatus.Idle && this.queue.length) this.play();
+            if (_oldState.status === AudioPlayerStatus.Playing && newState.status === AudioPlayerStatus.Idle && this.queue.length) return this.play();
+            if (newState.status === AudioPlayerStatus.Idle) return this.isPlaying = false;
         })
     }
 
