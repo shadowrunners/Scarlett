@@ -5,10 +5,6 @@ import { Blowfish } from 'egoroof-blowfish'
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { FFmpeg, opus } from 'prism-media';
-import { createAudioResource } from '@discordjs/voice';
-import { createWriteStream } from 'node:fs';
-import { pipeline } from 'node:stream/promises';
-import { json } from 'stream/consumers';
 
 const instance = axios.create({
     baseURL: 'https://api.deezer.com/1.0',
@@ -25,17 +21,30 @@ const instance = axios.create({
     params: {},
 });
 
+const ffmpeg = new FFmpeg({
+    args: [
+        '-analyzeduration', '0',
+        '-loglevel', '0',
+        '-f', 's16le',
+        '-ar', '48000',
+        '-ac', '2',
+    ],
+});
+
 export class Deezer {
     private decryptionKey: string;
     private privateAPI: string;
     private publicAPI: string;
     private scarlett: Manager;
+    private ffmpeg: FFmpeg;
 
     constructor(scarlett: Manager) {
         this.scarlett = scarlett;
         this.publicAPI = 'https://api.deezer.com';
         this.privateAPI = 'https://www.deezer.com/ajax/gw-light.php';
         this.decryptionKey = this.scarlett.options.sources.deezer.masterKey;
+
+        this.ffmpeg = ffmpeg;
     }
 
     /** 
@@ -161,18 +170,8 @@ export class Deezer {
         });
         stream.push(decryptedBuffer);
 
-        const ffmpeg = new FFmpeg({
-            args: [
-                '-analyzeduration', '0',
-                '-loglevel', '0',
-                '-f', 's16le',
-                '-ar', '48000',
-                '-ac', '2',
-            ],
-        });
-
         const opusEncoder = new opus.Encoder({ rate: 48000, channels: 2, frameSize: 960 });
-        const ffmpegPiped = stream.pipe(ffmpeg);
+        const ffmpegPiped = stream.pipe(this.ffmpeg);
         const opusStream = ffmpegPiped.pipe(opusEncoder);
         return opusStream;
     }
