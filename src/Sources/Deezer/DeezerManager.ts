@@ -47,13 +47,14 @@ export class Deezer {
         const deezerRegex = new RegExp('https?:\\/\\/?(www\\.)?deezer\\.com\\/(?<countrycode>[a-zA-Z]{2}\\/)?(?<type>track|album|playlist|artist)\\/(?<identifier>[0-9]+)');
 
         const identifier = query.match(deezerRegex);
+        if (!identifier) return this.fetchQuery(query);
         switch (identifier.groups.type) {
             case 'album':
                 return this.fetchAlbum(identifier.groups.identifier);
             case 'track':
                 return this.fetchSong(identifier.groups.identifier);
             default:
-                return this.fetchQuery(query);
+                console.log('Unimplemented method.')
         }
     }
 
