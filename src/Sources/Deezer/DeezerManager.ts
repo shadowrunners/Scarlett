@@ -57,33 +57,23 @@ export class Deezer {
     }
 
     private async fetchQuery(query: string) {
-        return axios.get(`${this.publicAPI}/search?q=${encodeURIComponent(query)}`).then((res) => {
-            console.log(res.data);
-            return this.builder.buildDeezerTrack(res.data[0]);
-        });
-
-        // const jsonData = await res.data as QueryResponse;
+        const res = await axios.get(`${this.publicAPI}/search?q=${encodeURIComponent(query)}`);
+        return this.builder.buildDeezerTrack((res.data as QueryResponse).data[0]);
     }
 
     private async fetchSong(query: string) {
         const res = await axios.get(`${this.publicAPI}/track/${query}`);
-        const jsonData = await res.data as APITrackResponse;
-
-        return this.builder.buildDeezerTrack(jsonData);
+        return this.builder.buildDeezerTrack(res.data as APITrackResponse);
     }
 
     private async fetchAlbum(query: string) {
         const res = await axios.get(`${this.publicAPI}/album/${query}`);
-        const jsonData = await res.data as APIAlbum;
-        
-        return this.builder.buildDeezerAlbum(jsonData);
+        return this.builder.buildDeezerAlbum(res.data as APIAlbum);
     }
 
     private async fetchPlaylist(query: string) {
         const res = await axios.get(`${this.publicAPI}/playlist/${query}`);
-        const jsonData = await res.data as APIPlaylist;
-        
-        return this.builder.buildDeezerPlaylist(jsonData);
+        return this.builder.buildDeezerPlaylist(res.data as APIPlaylist);
     }
 
     private async resolveShareUrl(query: string) {
