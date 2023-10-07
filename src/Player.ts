@@ -1,19 +1,31 @@
 import { AudioPlayer, AudioPlayerStatus, AudioResource, VoiceConnection, createAudioPlayer, createAudioResource, joinVoiceChannel } from "@discordjs/voice";
-import { Readable } from "stream";
 import { Manager } from ".";
 import Queue from "./Queue";
+import { DeezerUtils } from "./Utils/DeezerUtils";
 
 export class Player {
+    /** The voice player connection. */
     private connection: VoiceConnection;
+    /** The player. */
     private player: AudioPlayer;
+    /** The audio resource that will be played. */
     private audioResource: AudioResource;
+    /** The manager of Disrupt. */
     private scarlett: Manager;
 
+    /** Indicates if the player is playing anything or not. */
     public isPlaying: boolean = false;
+    /** The player's queue. */
     public queue: Queue = new Queue();
+    /** The now playing message. */
+    public nowPlayingMessage: NowPlayingMessage;
+    /** The text channel. */
+    public textChannel: string;
+    deezerUtils: DeezerUtils;
 
     constructor(options: PlayerOptions, scarlett: Manager) {
         this.scarlett = scarlett;
+        this.deezerUtils = new DeezerUtils(scarlett.options.sources.deezer.masterKey);
         this.connection = joinVoiceChannel({
             channelId: options.channelId,
             guildId: options.guildId,
@@ -21,26 +33,42 @@ export class Player {
             selfDeaf: options.selfDeaf,
         });
 
+        this.textChannel = options.textChannel;
         this.player = createAudioPlayer();
 
         this.connection.subscribe(this.player);
 
         this.player.on('stateChange', (_oldState, newState) => {
             // Play the next track if the queue isn't empty and if the old state was "Buffering".
-            if (_oldState.status === AudioPlayerStatus.Playing && newState.status === AudioPlayerStatus.Idle && this.queue.length) return this.play();
-            if (newState.status === AudioPlayerStatus.Idle) return this.isPlaying = false;
+            if (_oldState.status === AudioPlayerStatus.Playing && newState.status === AudioPlayerStatus.Idle && this.queue.length) {
+                this.scarlett.emit('trackEnd', this, this.queue.current);
+                return this.play();
+            }
+            if (newState.status === AudioPlayerStatus.Idle) {
+                this.scarlett.emit('queueEnd', this);
+                return this.isPlaying = false;
+            }
         })
     }
 
     /** Plays the currently enqueued track. */
-    public play() {
+    public async play(): Promise<void> {
         if (!this.queue.length) return;
         if (this.player.state.status === AudioPlayerStatus.Buffering || this.player.state.status === AudioPlayerStatus.Paused) return;
         this.queue.current = this.queue.shift();
 
+        // This will fetch the media URL of the song that will be played.
+        switch (this.queue.current.source) {
+            case 'deezer':
+                this.queue.current.stream = await this.deezerUtils.fetchMediaURL(this.queue.current.id);
+            case 'soundcloud':
+                // TODO: Implement.
+        }
+
         this.audioResource = createAudioResource(this.queue.current.stream);
         
         this.player.play(this.audioResource);
+        this.scarlett.emit('trackStart', this, this.queue.current);
         this.isPlaying = true;
     }
 
@@ -53,7 +81,6 @@ export class Player {
         this.play();
 
         this.queue.previous = null;
-
     }
 
     /** Pauses the player. */
@@ -69,20 +96,50 @@ export class Player {
     }
 
     /** Skips the currently playing track. */
-    public skip() { 
+    public skip(): void { 
         this.player.stop(true);
         this.play();
     }
 
     /** Destroys the player (connection). */
     public destroy(): void {
+        this.scarlett.emit('connectionTerminated');
         return this.connection.destroy();
     }
+    
+    /** Sets the text channel where event messages will be sent. */
+    public setTextChannel(channelId: string) {
+        this.textChannel = channelId;
+        return channelId;
+    }
+
+	/** Sets the now playing message. */
+	public setNowPlayingMessage(message: NowPlayingMessage): NowPlayingMessage {
+		this.nowPlayingMessage = message;
+		return message;
+	}
 }
 
 export interface PlayerOptions {
+    /** The ID of the voice channel that Disrupt will be connecting to. */
     channelId: string;
+    /** The ID of the text channel that Disrupt will be sending her messages. */
+    textChannel: string;
+    /** The ID of the server. */
     guildId: string;
+    /** The server's voice adapter. */
     adapter: any;
+    /** Whether the player should be deafened or not. */
     selfDeaf: boolean;
+    /** The voice channel's bitrate. */
+    bitrate: number;
+}
+
+interface NowPlayingMessage {
+	/** The ID of the channel. */
+	channelId: string;
+	/** The boolean indicating if the message has been deleted or not. */
+	deleted?: boolean;
+	/** The delete function. */
+	delete: () => Promise<unknown>;
 }
