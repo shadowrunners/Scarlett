@@ -1,22 +1,20 @@
-import { Readable } from 'node:stream';
+import { EventEmitter } from 'node:events';
 import { Player, PlayerOptions } from './Player';
 import { Deezer } from './Sources/Deezer/DeezerManager';
-import { createAudioResource, demuxProbe } from '@discordjs/voice';
+import { SoundCloud } from './Sources/SoundCloud/SoundCloudManager';
+import { Track } from './Models/Track';
+import { Album } from './Models/Album';
+import { Playlist } from './Models/Playlist';
 
-export class Manager {
-   
+export class Manager extends EventEmitter {
     public options: Options;
-    public players = new Map();
+    public players: Map<string, Player>;
 
     constructor(options: Options) {
+        super();
+
+        this.players = new Map();
         this.options = options;
-
-
-    }
-
-    public async debugStream(provStream: Readable) {
-        const { stream, type } = await demuxProbe(provStream);
-	    return console.log(stream, type)
     }
 
     public create(options: PlayerOptions) {
@@ -32,10 +30,15 @@ export class Manager {
         return player; 
     }
 
-    public async resolve(options: ResolveOptions) {
+    public async resolve(options: ResolveOptions): Promise<ResolveResponse> {
         const deezerRegex = new RegExp('https?:\\/\\/?(www\\.)?deezer\\.com\\/(?<countrycode>[a-zA-Z]{2}\\/)?(?<type>track|album|playlist|artist)\\/(?<identifier>[0-9]+)');
-        if (options.query.match(deezerRegex) || this.options.defaultPlatform === 'deezer') return await new Deezer(this).resolve(options.query);
-        // 
+		const soundCloudRegex = /(https?:\/\/)?(www\.)?soundcloud\.com\/[^\s/]+(\/[^\s/]+)*\/?(\?[^#\s]*)?(#.*)?$/i;
+
+       if (options.query.match(soundCloudRegex) || this.options.defaultPlatform === 'soundcloud') {
+			console.log('Query matched!')
+			return await new SoundCloud(this).resolve(options.query);
+		}
+		if (options.query.match(deezerRegex) || this.options.defaultPlatform === 'deezer') return await new Deezer().resolve(options.query);
     }
 }
 
@@ -57,4 +60,68 @@ type Platform = 'soundcloud' | 'deezer';
 interface ResolveOptions {
     query: string,
     requester: unknown
+}
+
+/** The interface for all Disrupt events. */
+export interface DisruptEvents {
+	/**
+	 * Emitted when a player starts playing a new track.
+	 * @eventProperty
+	 */
+	trackStart: (player: Player, track: unknown) => void;
+
+	/**
+	 * Emitted when the player finishes playing a track.
+	 * @eventProperty
+	 */
+	trackEnd: (player: Player, track: unknown) => void;
+
+	/**
+	 * Emitted when the player's queue has finished.
+	 * @eventProperty
+	 */
+	queueEnd: (player: Player) => void;
+
+	/**
+	 * Emitted when a track gets stuck while it is playing.
+	 * @eventProperty
+	 */
+	trackStuck: (player: Player, track: unknown) => void;
+
+	/**
+   	 * Emitted when the connection is destroyed.
+   	 * @eventProperty
+     */
+	connectionTerminated: () => void;
+}
+
+export declare interface Manager {
+	on<K extends keyof DisruptEvents>(
+		event: K,
+		listener: DisruptEvents[K]
+	): this;
+	once<K extends keyof DisruptEvents>(
+		event: K,
+		listener: DisruptEvents[K]
+	): this;
+	emit<K extends keyof DisruptEvents>(
+		event: K,
+		...args: Parameters<DisruptEvents[K]>
+	): boolean;
+	off<K extends keyof DisruptEvents>(
+		event: K,
+		listener: DisruptEvents[K]
+	): this;
+}
+
+export interface ResolveResponse {
+    type: ResultTypes;
+    info: Track | Album | Playlist;
+}
+
+export enum ResultTypes {
+	TRACK = 'track',
+	ALBUM = 'album',
+	PLAYLIST = 'playlist',
+	SEARCH = 'search',
 }
