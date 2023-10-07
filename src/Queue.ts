@@ -1,4 +1,4 @@
-import { Track } from "./Track";
+import { Track } from "./Models/Track";
 
 export default class Queue extends Array<Track> {
     /** Gets the size of the queue. */
@@ -16,6 +16,7 @@ export default class Queue extends Array<Track> {
 	 * @param track - The track that will be added to the queue.
 	 */
 	public add(track: Track): this {
+		if (!track) return;
 		this.push(track);
 		return this;
 	}
