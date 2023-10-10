@@ -1,6 +1,7 @@
 import m3u8 from 'm3u8stream';
 import axios from 'axios';
 
+/** The utilities built for the SoundCloud source. */
 export class SoundCloudUtils {
     /** The client ID that will be used to fetch the transcoded stream. */
     private clientId: string;
