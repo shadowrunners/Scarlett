@@ -1,25 +1,34 @@
-import { Readable } from "stream";
 import { Track } from "./Track";
 
+/** This is Disrupt's Album class. Used for creating album metadata. */
 export class Album {
-    id: string;
-    title: string;
-    artist: string;
-    duration: number;
-    label: string;
-    link: string;
-    artworkURL: string;
-    stream?: Readable;
-    source: string;
-    tracks: Track[]
+    /** The album's ID on the specific platform.*/
+    public id: string;
+    /** The album's title. */
+    public title: string;
+    /** The artist of the album. (optional) */
+    public artist?: string;
+    /** The duration of the album. */
+    public duration: number;
+    /** The label that distributed the album. */
+    public label?: string;
+    /** The link to the album. */
+    public link: string;
+    /** The URL to the artwork of the album. */
+    public artworkURL: string;
+    /** The source that fetched the album. */
+    public source: string;
+    /** The array of fetched tracks. */
+    public tracks: Track[];
 
     constructor(data: AlbumData, source: string) {
         this.id = data.id;
-        this.artist = data.artist;
         this.title = data.title;
+        this.artist = data.artist ?? null;
         this.duration = data.duration;
-        this.artworkURL = data.artworkURL;
+        this.label = data.label ?? null;
         this.link = data.link;
+        this.artworkURL = data.artworkURL;
         this.source = source;
         this.tracks = data.tracks;
     }

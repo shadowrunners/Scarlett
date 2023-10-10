@@ -1,24 +1,31 @@
-import { Readable } from "stream";
 import { Track } from "./Track";
 
+/** This is Disrupt's Playlist class. Used for creating playlist metadata. */
 export class Playlist {
-    id: string;
-    title: string;
-    creator: string;
-    duration: number;
-    link: string;
-    artworkURL: string;
-    stream?: Readable;
-    source: string;
-    tracks: Track[]
+    /** The playlist's ID on the specific platform. */
+    public id: string;
+    /** The playlist's title. */
+    public title: string;
+    /** The playlist creator's name. */
+    public creator: string;
+    /** The playlist's duration. */
+    public duration: number;
+    /** The playlist's link on the specific platform. */
+    public link: string;
+     /** The artwork URL of the playlist. */
+    public artworkURL: string;
+    /** The source that fetched the playlist. */
+    public source: string;
+    /** The array of fetched tracks. */
+    public tracks: Track[];
 
     constructor(data: PlaylistData, source: string) {
         this.id = data.id;
-        this.creator = data.creator;
         this.title = data.title;
+        this.creator = data.creator;
         this.duration = data.duration;
-        this.artworkURL = data.artworkURL;
         this.link = data.link;
+        this.artworkURL = data.artworkURL;
         this.source = source;
         this.tracks = data.tracks;
     }
