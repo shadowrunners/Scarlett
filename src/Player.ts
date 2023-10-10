@@ -1,8 +1,10 @@
-import { AudioPlayer, AudioPlayerStatus, AudioResource, VoiceConnection, createAudioPlayer, createAudioResource, joinVoiceChannel } from "@discordjs/voice";
+import { AudioPlayer, AudioPlayerStatus, AudioResource, VoiceConnection, VoiceConnectionStatus, createAudioPlayer, createAudioResource, joinVoiceChannel } from "@discordjs/voice";
 import { Manager } from ".";
 import Queue from "./Queue";
 import { DeezerUtils } from "./Utils/DeezerUtils";
+import { SoundCloudUtils } from "./Utils/SoundCloudUtils";
 
+/** This is Disrupt's Player class, it's where all the voice magic happens. */
 export class Player {
     /** The voice player connection. */
     private connection: VoiceConnection;
@@ -21,11 +23,16 @@ export class Player {
     public nowPlayingMessage: NowPlayingMessage;
     /** The text channel. */
     public textChannel: string;
-    deezerUtils: DeezerUtils;
+
+    /** The Deezer Utilities class. Has all the decryption and fetching bells and whistles. */
+    private deezerUtils: DeezerUtils;
+    /** The SoundCloud Utilities class. Has all the decryption and fetching bells and whistles. */
+    private scUtils: SoundCloudUtils;
 
     constructor(options: PlayerOptions, scarlett: Manager) {
         this.scarlett = scarlett;
         this.deezerUtils = new DeezerUtils(scarlett.options.sources.deezer.masterKey);
+        this.scUtils = new SoundCloudUtils(scarlett.options.sources.soundcloud.clientId);
         this.connection = joinVoiceChannel({
             channelId: options.channelId,
             guildId: options.guildId,
@@ -37,6 +44,12 @@ export class Player {
         this.player = createAudioPlayer();
 
         this.connection.subscribe(this.player);
+
+        this.connection.on('stateChange', (_oldState, newState) => {
+            // Destroy the connection if the player is forcibly removed.
+            if (newState.status === VoiceConnectionStatus.Disconnected) 
+                return this.destroy();
+        })
 
         this.player.on('stateChange', (_oldState, newState) => {
             // Play the next track if the queue isn't empty and if the old state was "Buffering".
@@ -52,7 +65,7 @@ export class Player {
     }
 
     /** Plays the currently enqueued track. */
-    public async play(): Promise<void> {
+    public async play() {
         if (!this.queue.length) return;
         if (this.player.state.status === AudioPlayerStatus.Buffering || this.player.state.status === AudioPlayerStatus.Paused) return;
         this.queue.current = this.queue.shift();
@@ -61,8 +74,11 @@ export class Player {
         switch (this.queue.current.source) {
             case 'deezer':
                 this.queue.current.stream = await this.deezerUtils.fetchMediaURL(this.queue.current.id);
+                break;
             case 'soundcloud':
-                // TODO: Implement.
+                this.queue.current.stream = await this.scUtils.getTranscodedStream(this.queue.current.transcodedUrl);
+                break;
+            // TODO: Implement TIDAL, Apple Music and Spotify. Eventually at least.
         }
 
         this.audioResource = createAudioResource(this.queue.current.stream);
