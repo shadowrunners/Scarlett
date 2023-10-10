@@ -9,9 +9,9 @@ import { Playlist } from './Models/Playlist';
 /** This is Disrupt's Manager class. It manages player creation and resolving using the appropriate source. */
 export class Manager extends EventEmitter {
 	/** The manager's options. */
-    public options: Options;
+    	public options: Options;
 	/** The map of players. */
-    public players: Map<string, Player>;
+    	public players: Map<string, Player>;
 
 	/** The regex used to detect Deezer links. */
 	private deezerRegex: RegExp;
