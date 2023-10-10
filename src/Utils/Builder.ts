@@ -5,10 +5,16 @@ import { Album } from "../Models/Album";
 import { Deezer } from "../Sources/Deezer/DeezerManager";
 import { Playlist } from "../Models/Playlist";
 
+/** This is Disrupt's Builder class. Used for building raw metadata into tracks, albums and playlists. */
 export class Builder {
     constructor() {}
 
-    buildDeezerTrack(data: DeezerTrackData) {
+    /**
+     * Builds the raw Deezer API data into a prettified Track object.
+     * @param data The raw data from the Deezer API.
+     * @returns A track object.
+     */
+    public buildDeezerTrack(data: DeezerTrackData) {
         const track: Track = {
             id: data.id,
             artist: data.artist.name,
@@ -23,7 +29,12 @@ export class Builder {
         return track;
     }
 
-    buildDeezerAlbum(data: DeezerAlbumData) {
+    /**
+     * Builds the raw Deezer API data into a prettified Album object.
+     * @param data The raw data from the Deezer API.
+     * @returns An album object.
+     */
+    public buildDeezerAlbum(data: DeezerAlbumData) {
         const album: Album = {
             id: data.id,
             title: data.title,
@@ -39,7 +50,12 @@ export class Builder {
         return album;
     }
 
-    buildDeezerPlaylist(data: DeezerPlaylistData) {
+    /**
+     * Builds the raw Deezer API data into a prettified Playlist object.
+     * @param data The raw data from the Deezer API.
+     * @returns An playlist object.
+     */
+    public buildDeezerPlaylist(data: DeezerPlaylistData) {
         const playlist: Playlist = {
             id: data.id,
             title: data.title,
@@ -54,7 +70,51 @@ export class Builder {
         return playlist;
     }
 
-    buildSCTrack(data: SCTrackData) {
+    /**
+     * Builds the raw SoundCloud API data into a prettified Track object.
+     * @param data The raw data from the SoundCloud API.
+     * @returns A track object.
+     */
+    public buildSCTrack(data: SCTrackData) {
+        const track: Track = {
+            id: data.id,
+            title: data.title,
+            link: data.permalink,
+            artworkURL: data.artwork_url,
+            duration: data.duration,
+            artist: null,
+            transcodedUrl: data.media.transcodings[2].url,
+            source: 'soundcloud',
+        };
+
+        return track;
+    }
+
+    /**
+     * Builds the raw SoundCloud API data into a prettified Album object.
+     * @param data The raw data from the SoundCloud API.
+     * @returns An album object.
+     */
+    public buildSCAlbum(data: SCAlbumData) {
+        const album: Album = {
+            id: data.id,
+            title: data.title,
+            link: data.permalink_url,
+            artworkURL: data.artwork_url,
+            duration: data.duration,
+            source: 'soundcloud',
+            tracks: data.tracks.map((track) => this.buildSCTrack(track))
+        };
+
+        return album;
+    }
+
+    /**
+     * Builds the raw SoundCloud API data into a prettified Playlist object.
+     * @param data The raw data from the SoundCloud API.
+     * @returns A playlist object.
+     */
+    public buildSCPlaylist(data: SCTrackData) {
         const track: Track = {
             id: data.id,
             title: data.title,
@@ -68,35 +128,10 @@ export class Builder {
         return track;
     }
 
-    buildSCAlbum(data: SCTrackData) {
-        const track: Track = {
-            id: data.id,
-            title: data.title,
-            link: data.permalink,
-            artworkURL: data.artwork_url,
-            duration: data.duration,
-            artist: null,
-            source: 'soundcloud',
-        };
-
-        return track;
-    }
-    
-    buildSCPlaylist(data: SCTrackData) {
-        const track: Track = {
-            id: data.id,
-            title: data.title,
-            link: data.permalink,
-            artworkURL: data.artwork_url,
-            duration: data.duration,
-            artist: null,
-            source: 'soundcloud',
-        };
-
-        return track;
-    }
-    buildBandcampTrack() {}
-    buildSpotifyTrack() {}
+    // TODO: Implement.
+    // Placeholders for now.
+    private buildBandcampTrack() {}
+    private buildSpotifyTrack() {}
 }
 
 interface DeezerAlbumData {
@@ -148,5 +183,27 @@ interface SCTrackData {
     permalink: string;
     artwork_url: string;
     duration: number;
+    media: {
+        transcodings: [
+            {
+               url: string; 
+            },
+            {
+                url: string; 
+            },
+            {
+                url: string; 
+            },
+        ]
+    }
     stream?: m3u8stream.Stream;
+}
+
+interface SCAlbumData {
+    id: string;
+    title: string;
+    permalink_url: string;
+    artwork_url: string;
+    duration: number;
+    tracks: SCTrackData[];
 }
