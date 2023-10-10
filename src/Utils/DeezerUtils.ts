@@ -38,11 +38,34 @@ export class DeezerUtils {
     /** The decryption key used to decrypt tracks. */
     private decryptionKey: string;
 
+    /** The API key used to get song data. */
+    private apiKey: string;
+    /** The license token used to generate stream URLs. */
+    private licenseToken: string;
+
 
     constructor(decryptionKey: string) {
         this.privateAPI = 'https://www.deezer.com/ajax/gw-light.php';
         this.ffmpeg = ffmpeg;
         this.decryptionKey = decryptionKey;
+
+        this.apiKey = null;
+        this.licenseToken = null;
+    }
+
+    /**
+     * Fetches the API key and license token needed for the API.
+     * @param arl The Deezer ARL that will be used to fetch higher quality tracks. (CURRENTLY NOT IMPLEMENTED)
+     */
+    private async fetchAPIKey(arl?: string) {
+        const sessionId = await instance.post(`${this.privateAPI}?method=deezer.ping&input=3&api_version=1.0&api_token=`);
+        instance.defaults.params.sid = (sessionId.data as SessionID).results.SESSION;
+
+        const userToken = await instance.post(`${this.privateAPI}?method=deezer.getUserData&input=3&api_version=1.0&api_token=`);
+        this.licenseToken = (userToken.data as LicenseToken).results.USER.OPTIONS.license_token;
+
+        this.apiKey = (userToken.data as LicenseToken).results.checkForm;
+        instance.defaults.params.api_token = this.apiKey;
     }
 
     /** 
@@ -51,12 +74,7 @@ export class DeezerUtils {
      * @returns {Promise<opus.Encoder>} An Opus encoded stream.
      */
     public async fetchMediaURL(id: string): Promise<opus.Encoder> {
-        const sessionId = await instance.post(`${this.privateAPI}?method=deezer.ping&input=3&api_version=1.0&api_token=`);
-        instance.defaults.params.sid = (sessionId.data as SessionID).results.SESSION;
-
-        const userToken = await instance.post(`${this.privateAPI}?method=deezer.getUserData&input=3&api_version=1.0&api_token=`);
-        const licenseToken = (userToken.data as LicenseToken).results.USER.OPTIONS.license_token;
-        instance.defaults.params.api_token = (userToken.data as LicenseToken).results.checkForm;
+        if (!instance.defaults.params.api_token || !instance.defaults.params.sid) await this.fetchAPIKey();
 
         const trackTokenReq = await instance.post(`${this.privateAPI}?method=song.getData&input=3&api_version=1.0&api_token=`, {
             'sng_id': id
@@ -64,7 +82,7 @@ export class DeezerUtils {
         const trackToken = (trackTokenReq.data as TrackToken).results.TRACK_TOKEN;
 
         const trackUrlReq = await instance.post(`https://media.deezer.com/v1/get_url`, {
-            license_token: licenseToken,
+            license_token: this.licenseToken,
             media: [
                 {
                     type: 'FULL',
