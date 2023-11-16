@@ -16,7 +16,7 @@ export class SoundCloudBuilder implements ISCBuilder {
 	public buildTrack(data: SCTrackData): Track {
 		return new Track({
 			id: data.id,
-			artist: data.publisher_metadata.artist,
+			artist: data.publisher_metadata.artist ?? 'A Talented Artist',
 			title: data.title,
 			isrc: data.publisher_metadata.isrc,
 			uri: data.permalink_url,
