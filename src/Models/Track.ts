@@ -22,6 +22,8 @@ export class Track {
 	public transcodedUrl?: string;
 	/** The song's readable stream. Used to play back the song. */
 	public stream?: Readable;
+	/** The person that queued up the song. */
+	public requester: unknown;
 
 	constructor(data: TrackData) {
 		this.id = data.id;
@@ -33,6 +35,7 @@ export class Track {
 		this.uri = data.uri;
 		this.source = data.source;
 		this.transcodedUrl = data.transcodedUrl;
+		this.requester = data.requester;
 	}
 }
 
@@ -46,4 +49,5 @@ type TrackData = {
     uri: string;
     source: string;
 	transcodedUrl?: string;
+	requester: unknown;
 }

@@ -2,18 +2,19 @@ import { Album, Playlist, Track } from '../../Models';
 import { Readable } from 'stream';
 
 interface IDZBuilder {
-    buildTrack(data: DZTrackData): Track;
-    buildAlbum(data: DZAlbumData): Album;
-    buildPlaylist(data: DZPlaylistData): Playlist;
+    buildTrack(data: DZTrackData, requester: unknown): Track;
+    buildAlbum(data: DZAlbumData, requester: unknown): Album;
+    buildPlaylist(data: DZPlaylistData, requester: unknown): Playlist;
 }
 
 export class DeezerBuilder implements IDZBuilder {
 	/**
      * Builds the raw Deezer API data into a Disrupt Track.
      * @param data The raw data from the Deezer API.
+     * @param requester The person that requested the song.
      * @returns A track.
      */
-	public buildTrack(data: DZTrackData): Track {
+	public buildTrack(data: DZTrackData, requester: unknown): Track {
 		return new Track({
 			id: data.id,
 			artist: data.artist.name,
@@ -23,15 +24,17 @@ export class DeezerBuilder implements IDZBuilder {
 			duration: data.duration,
 			artworkUrl: this.buildArtworkUrl(data.md5_image),
 			source: 'deezer',
+			requester,
 		});
 	}
 
 	/**
      * Builds the raw Deezer API data into a Disrupt Album.
      * @param data The raw data from the Deezer API.
+     * @param requester The person that requested the song.
      * @returns An album object.
      */
-	public buildAlbum(data: DZAlbumData): Album {
+	public buildAlbum(data: DZAlbumData, requester: unknown): Album {
 		return new Album({
 			id: data.id,
 			artist: data.artist.name,
@@ -40,7 +43,7 @@ export class DeezerBuilder implements IDZBuilder {
 			upc: data.upc,
 			duration: data.duration,
 			artworkUrl: data.cover_big,
-			tracks: data.tracks.data.map((track) => this.buildTrack(track)),
+			tracks: data.tracks.data.map((track) => this.buildTrack(track, requester)),
 			source: 'deezer',
 		});
 	}
@@ -48,9 +51,10 @@ export class DeezerBuilder implements IDZBuilder {
 	/**
      * Builds the raw Deezer API data into a Disrupt Playlist.
      * @param data The raw data from the Deezer API.
+     * @param requester The person that requested the song.
      * @returns An playlist object.
      */
-	public buildPlaylist(data: DZPlaylistData): Playlist {
+	public buildPlaylist(data: DZPlaylistData, requester: unknown): Playlist {
 		return new Playlist({
 			id: data.id,
 			title: data.title,
@@ -59,7 +63,7 @@ export class DeezerBuilder implements IDZBuilder {
 			uri: data.link,
 			artworkUrl: data.picture_big,
 			source: 'deezer',
-			tracks: data.tracks.data.map((track) => this.buildTrack(track)),
+			tracks: data.tracks.data.map((track) => this.buildTrack(track, requester)),
 		});
 	}
 

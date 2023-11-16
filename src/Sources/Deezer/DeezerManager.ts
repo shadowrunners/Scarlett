@@ -19,9 +19,10 @@ export class Deezer {
 	/**
      * Fetches the query based on the regex.
      * @param query The link of the track / album / playlist or the query.
+	 * @param requester The person that requested the song.
      * @returns The appropriate response.
      */
-	public async resolve(query: string): Promise<ResolveResponse> {
+	public async resolve(query: string, requester: unknown): Promise<ResolveResponse> {
 		let songQuery: string;
 
 		if (query.match(this.pageLinkRegex)) songQuery = await this.resolveShareUrl(query);
@@ -32,44 +33,44 @@ export class Deezer {
 		case 'album':
 			return {
 				type: ResultTypes.ALBUM,
-				info: await this.fetchAlbum(identifier.groups.identifier),
+				info: await this.fetchAlbum(identifier.groups.identifier, requester),
 			};
 		case 'track':
 			return {
 				type: ResultTypes.TRACK,
-				info: await this.fetchSong(identifier.groups.identifier),
+				info: await this.fetchSong(identifier.groups.identifier, requester),
 			};
 		case 'playlist':
 			return {
 				type: ResultTypes.PLAYLIST,
-				info: await this.fetchPlaylist(identifier.groups.identifier),
+				info: await this.fetchPlaylist(identifier.groups.identifier, requester),
 			};
 		default:
 			return {
 				type: ResultTypes.SEARCH,
-				info: await this.fetchQuery(query),
+				info: await this.fetchQuery(query, requester),
 			};
 		}
 	}
 
-	private async fetchQuery(query: string) {
+	private async fetchQuery(query: string, requester: unknown) {
 		const res = await axios.get(`${this.publicAPI}/search?q=${encodeURIComponent(query)}`);
-		return this.builder.buildTrack((res.data as QueryResponse).data[0]);
+		return this.builder.buildTrack((res.data as QueryResponse).data[0], requester);
 	}
 
-	private async fetchSong(query: string) {
+	private async fetchSong(query: string, requester: unknown) {
 		const res = await axios.get(`${this.publicAPI}/track/${query}`);
-		return this.builder.buildTrack(res.data as APITrackResponse);
+		return this.builder.buildTrack(res.data as APITrackResponse, requester);
 	}
 
-	private async fetchAlbum(query: string) {
+	private async fetchAlbum(query: string, requester: unknown) {
 		const res = await axios.get(`${this.publicAPI}/album/${query}`);
-		return this.builder.buildAlbum(res.data as APIAlbum);
+		return this.builder.buildAlbum(res.data as APIAlbum, requester);
 	}
 
-	private async fetchPlaylist(query: string) {
+	private async fetchPlaylist(query: string, requester: unknown) {
 		const res = await axios.get(`${this.publicAPI}/playlist/${query}`);
-		return this.builder.buildPlaylist(res.data as APIPlaylist);
+		return this.builder.buildPlaylist(res.data as APIPlaylist, requester);
 	}
 
 	private async resolveShareUrl(query: string) {

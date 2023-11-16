@@ -26,48 +26,47 @@ export class SoundCloud {
      * @param query The link of the track / album / playlist or the query.
      * @returns The appropriate response.
      */
-	public async resolve(query: string): Promise<ResolveResponse> {
+	public async resolve(query: string, requester: unknown): Promise<ResolveResponse> {
 		const identifier = query.match(this.scRegex) || null;
-		console.log(identifier);
 
 		if (!identifier) return {
 			type: ResultTypes.SEARCH,
-			info: await this.fetchQuery(query),
+			info: await this.fetchQuery(query, requester),
 		};
 
 		if (identifier[3] && identifier[3].startsWith('sets')) return {
 			type: ResultTypes.ALBUM,
-			info: await this.fetchPlaylist(query),
+			info: await this.fetchPlaylist(query, requester),
 		};
 
 		return {
 			type: ResultTypes.TRACK,
-			info: await this.fetchSong(query),
+			info: await this.fetchSong(query, requester),
 		};
 	}
 
-	private async fetchQuery(query: string) {
+	private async fetchQuery(query: string, requester: unknown) {
 		const res = await axios.get(`${this.apiURL}/search/tracks?q=${query}&client_id=${this.clientId}`);
 		const jsonResponse = res.data as SearchResult;
 
-		return this.builder.buildTrack(jsonResponse.collection[0]);
+		return this.builder.buildTrack(jsonResponse.collection[0], requester);
 	}
 
-	private async fetchSong(query: string) {
+	private async fetchSong(query: string, requester: unknown) {
 		const res = await axios.get(`${this.apiURL}/resolve?url=${query}&client_id=${this.clientId}`);
 		const jsonResponse = res.data as APIResponse;
 
-		return this.builder.buildTrack(jsonResponse);
+		return this.builder.buildTrack(jsonResponse, requester);
 	}
 
-	private async fetchPlaylist(query: string) {
+	private async fetchPlaylist(query: string, requester: unknown) {
 		const res = await axios.get(`${this.apiURL}/resolve?url=${query}&client_id=${this.clientId}`);
 		const jsonResponse = res.data as APIPlaylist;
 
 		// Fetches all the songs in the playlist since sometimes SC only provides IDs.
 		const tData = await axios.get(`${this.apiURL}/tracks?ids=${jsonResponse.tracks.map((track) => `${track.id},`)}`);
 
-		return this.builder.buildPlaylist(jsonResponse, tData.data as APIResponse[]);
+		return this.builder.buildPlaylist(jsonResponse, tData.data as APIResponse[], requester);
 	}
 }
 

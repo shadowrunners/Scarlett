@@ -71,11 +71,11 @@ export class Manager extends EventEmitter {
 	 */
 	public async resolve(options: ResolveOptions): Promise<ResolveResponse> {
 		if (options.query.match(this.soundCloudRegex) || this.options.defaultPlatform === 'soundcloud')
-			return await this.soundcloud.resolve(options.query);
+			return await this.soundcloud.resolve(options.query, options.requester);
 		// if (options.query.match(this.spotifyRegex))
 		// 	return await this.spotify.resolve(options.query);
 		if (options.query.match(this.deezerRegex) || this.options.defaultPlatform === 'deezer')
-			return await this.deezer.resolve(options.query);
+			return await this.deezer.resolve(options.query, options.requester);
 	}
 }
 
