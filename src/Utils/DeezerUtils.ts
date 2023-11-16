@@ -1,5 +1,5 @@
 import axios from "axios";
-import { Blowfish } from 'egoroof-blowfish'
+import { Blowfish } from '../Utils/Blowfish/BFLib.js';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { FFmpeg, opus } from "prism-media";
@@ -113,7 +113,7 @@ export class DeezerUtils {
         const blowfishKey = this.generateBlowfishKey(id);
         let cipher = new Blowfish(blowfishKey, Blowfish.MODE.CBC, Blowfish.PADDING.NULL)
         cipher.setIv(new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]))
-        return cipher.decode(chunk, Blowfish.TYPE.UINT8_ARRAY);
+        return cipher.decode(chunk, Blowfish.TYPE.UINT8_ARRAY) as Uint8Array;
     }
 
     /** 
