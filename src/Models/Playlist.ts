@@ -30,7 +30,7 @@ export class Playlist implements PlaylistData {
 	}
 }
 
-interface PlaylistData {
+type PlaylistData = {
     id: string;
     creator: string;
     title: string;

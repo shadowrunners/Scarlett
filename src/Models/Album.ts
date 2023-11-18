@@ -1,13 +1,13 @@
 import { Track } from './Track.js';
 
 /** This is Disrupt's Album class. Used for creating album metadata. */
-export class Album {
+export class Album implements AlbumData {
 	/** The album's ID on the specific platform.*/
 	public id: string;
 	/** The album's title. */
 	public title: string;
 	/** The artist of the album. (optional) */
-	public artist?: string | string[];
+	public artist?: string;
 	/** The duration of the album. */
 	public duration: number;
 	/** The link to the album. */
@@ -35,7 +35,7 @@ export class Album {
 
 type AlbumData = {
     id: string;
-    artist: string;
+    artist?: string;
     title: string;
     uri: string;
     upc?: string;

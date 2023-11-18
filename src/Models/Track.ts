@@ -1,13 +1,13 @@
 import { Readable } from 'node:stream';
 
 /** This is Disrupt's Track class. Used for creating track metadata. */
-export class Track {
+export class Track implements TrackData {
 	/** The track's ID on the specific platform. */
 	public id: string;
 	/** The track's title. */
 	public title: string;
 	/** The track's artist. */
-	public artist: string | string[];
+	public artist: string;
 	/** The track's duration. */
 	public duration: number;
 	/** The track's URL on the specific platform. */
@@ -43,7 +43,7 @@ type TrackData = {
     id: string;
     artist: string;
     title: string;
-    isrc: string;
+    isrc?: string;
     duration: number;
     artworkUrl: string;
     uri: string;
