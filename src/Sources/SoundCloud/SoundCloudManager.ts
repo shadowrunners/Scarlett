@@ -24,6 +24,7 @@ export class SoundCloud {
 	/**
      * Fetches the query based on the regex.
      * @param query The link of the track / album / playlist or the query.
+	 * @param requester The person that requested the provided query.
      * @returns The appropriate response.
      */
 	public async resolve(query: string, requester: unknown): Promise<ResolveResponse> {
