@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { Player, PlayerOptions } from './Player';
 import { Deezer } from './Sources/Deezer/DeezerManager';
 import { SoundCloud } from './Sources/SoundCloud/SoundCloudManager';
+import { Spotify } from './Sources/Spotify/SpotifyManager';
 import { Track, Album, Playlist } from './Models';
 // import { Spotify } from './Sources/Spotify/SpotifyManager';
 
@@ -24,7 +25,7 @@ export class Manager extends EventEmitter {
 	/** The Deezer source manager. */
 	private deezer: Deezer;
 	/** The Spotify source manager. */
-	// private spotify: Spotify;
+	private spotify: Spotify;
 
 	constructor(options: Options) {
 		super();
@@ -34,7 +35,7 @@ export class Manager extends EventEmitter {
 
 		this.soundcloud = new SoundCloud(this);
 		this.deezer = new Deezer();
-		// this.spotify = new Spotify(this);
+		this.spotify = new Spotify(this);
 
 		this.deezerRegex = /^(https?:\/\/?(www\.)?deezer\.com\/(?<countrycode>[a-zA-Z]{2}\/)?(?<type>track|album|playlist|artist)\/(?<identifier>[0-9]+))$/;
 		this.soundCloudRegex = /(https?:\/\/)?(www\.)?soundcloud\.com\/[^\s/]+(\/[^\s/]+)*\/?(\?[^#\s]*)?(#.*)?$/i;
@@ -72,8 +73,8 @@ export class Manager extends EventEmitter {
 	public async resolve(options: ResolveOptions): Promise<ResolveResponse> {
 		if (options.query.match(this.soundCloudRegex) || this.options.defaultPlatform === 'soundcloud')
 			return await this.soundcloud.resolve(options.query, options.requester);
-		// if (options.query.match(this.spotifyRegex))
-		// 	return await this.spotify.resolve(options.query);
+		if (options.query.match(this.spotifyRegex))
+			return await this.spotify.resolve(options.query, options.requester);
 		if (options.query.match(this.deezerRegex) || this.options.defaultPlatform === 'deezer')
 			return await this.deezer.resolve(options.query, options.requester);
 	}

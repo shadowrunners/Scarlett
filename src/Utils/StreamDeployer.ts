@@ -15,12 +15,23 @@ export class StreamDeployer {
 		this.scClientId = disrupt.options.sources.soundcloud.clientId;
 	}
 
-	async deployStream({ track, source }: { track: Track, source: string }) {
+	/**
+	 * Gets the platform-specific stream.
+	 * @private
+	 * @async
+	 * @param track The track object.
+	 * @param source The music service the query comes from.
+	 * @returns The platform-specific stream.
+	 */
+	public async deployStream({ track, source }: { track: Track, source: string }) {
 		switch (source) {
 		case 'spotify':
+			return await axios.get(`https://api.deezer.com/track/isrc:${track.isrc}`).then(async (res) => {
+				return await this.dzUtils.fetchMediaURL(res.data.id);
+			});
+
 			// case 'tidal':
 			// Yes, TIDAL will use Deezer as their API requires an account w/ subscription.
-			break;
 		case 'deezer':
 			return await this.dzUtils.fetchMediaURL(track.id);
 		case 'soundcloud':
