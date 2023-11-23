@@ -5,9 +5,9 @@ An experimental music library that can play back audio to discord.js bots.
 Disrupt currently supports:
 - Deezer (with native playback, main streaming platform; thanks to [LavaSrc](https://github.com/topi314/LavaSrc) for helping me understand how to get streams)
 - SoundCloud (with native playback)
+- Spotify (only metadata is fetched from Spotify, audio comes from Deezer)
 
 Sources that are coming:
-- Spotify (only metadata is fetched from Spotify, audio comes from Deezer)
 - Bandcamp (with native playback)
 - Apple Music (via Deezer)
 - TIDAL (via Deezer, native playback is harder, might attempt)
