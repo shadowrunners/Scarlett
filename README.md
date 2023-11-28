@@ -20,4 +20,4 @@ Currently, there are no prebuilt versions of this library neither here nor on NP
 This library is heavily inspired by [LavaSrc](https://github.com/topi314/LavaSrc). If you want to use Lavalink instead of this, I highly recommend installing this plugin.
 Alongside this, huge thanks go to the many Deezer related projects that helped me understand Deezer's encryption algorithm and how their private API works.
 
-Uses the Blowfish library from [egoroof](https://github.com/egoroof/blowfish). Source code is contained the Utils/Blowfish folder, was taken and put into the project to maintain CJS compatiblity (maintainer only provides an MJS file). All credits go to them for the library.
+This project uses the Blowfish library from [egoroof](https://github.com/egoroof/blowfish) which was adapted and modified for use in this project (transformed from ESM only into ESM + CJS for compatibility). The used library is licensed under the MIT License and the original (untouched) license of it can be viewed [here](https://github.com/shadowrunners/Disrupt/blob/main/src/Utils/Blowfish/LICENSE.md).
