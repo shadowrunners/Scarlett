@@ -2,76 +2,82 @@ import { EventEmitter } from 'node:events';
 import { Player, PlayerOptions } from './Player';
 import { Deezer } from './Sources/Deezer/DeezerManager';
 import { SoundCloud } from './Sources/SoundCloud/SoundCloudManager';
-import { Track } from './Models/Track';
-import { Album } from './Models/Album';
-import { Playlist } from './Models/Playlist';
+import { Spotify } from './Sources/Spotify/SpotifyManager';
+import { Track, Album, Playlist } from './Models';
+// import { Spotify } from './Sources/Spotify/SpotifyManager';
 
-/** This is Disrupt's Manager class. It manages player creation and resolving using the appropriate source. */
+/** This is Disrupt's Manager class. It manages player creation and resolves using the appropriate source. */
 export class Manager extends EventEmitter {
 	/** The manager's options. */
-    	public options: Options;
+	public options: Options;
 	/** The map of players. */
-    	public players: Map<string, Player>;
+	public players: Map<string, Player>;
 
 	/** The regex used to detect Deezer links. */
-	private deezerRegex: RegExp;
+	private readonly deezerRegex: RegExp;
 	/** The regex used to detect SoundCloud links. */
-	private soundCloudRegex: RegExp;
+	private readonly soundCloudRegex: RegExp;
+
+	spotifyRegex: RegExp;
 
 	/** The SoundCloud source manager. */
 	private soundcloud: SoundCloud;
 	/** The Deezer source manager. */
 	private deezer: Deezer;
+	/** The Spotify source manager. */
+	private spotify: Spotify;
 
-    constructor(options: Options) {
-        super();
+	constructor(options: Options) {
+		super();
 
-        this.players = new Map();
-        this.options = options;
+		this.players = new Map();
+		this.options = options;
 
-		this.soundcloud = new SoundCloud();
+		this.soundcloud = new SoundCloud(this);
 		this.deezer = new Deezer();
+		this.spotify = new Spotify(this);
 
-		this.deezerRegex = new RegExp('https?:\\/\\/?(www\\.)?deezer\\.com\\/(?<countrycode>[a-zA-Z]{2}\\/)?(?<type>track|album|playlist|artist)\\/(?<identifier>[0-9]+)');
+		this.deezerRegex = /^(https?:\/\/?(www\.)?deezer\.com\/(?<countrycode>[a-zA-Z]{2}\/)?(?<type>track|album|playlist|artist)\/(?<identifier>[0-9]+))$/;
 		this.soundCloudRegex = /(https?:\/\/)?(www\.)?soundcloud\.com\/[^\s/]+(\/[^\s/]+)*\/?(\?[^#\s]*)?(#.*)?$/i;
-    }
+		this.spotifyRegex = /^(https:\/\/open\.spotify\.com\/(track|album|playlist)\/[a-zA-Z0-9]+)(\?si=[a-zA-Z0-9]+)?$/;
+	}
 
 	/**
 	 * Creates a new player if there isn't already an existing one.
 	 * @param options The player's options.
 	 * @returns The existing player or a new player.
 	 */
-    public create(options: PlayerOptions) {
-        let player = this.players.get(options.guildId);
+	public create(options: PlayerOptions) {
+		let player = this.players.get(options.guildId);
 
-        if (!player) player = this.createPlayer(options);
-        return player;
-    }
+		if (!player) player = this.createPlayer(options);
+		return player;
+	}
 
 	/**
 	 * Creates a new player and adds it to the Player map.
 	 * @param options The player's options.
 	 * @returns The new player.
 	 */
-    private createPlayer(options: PlayerOptions) {
-        const player = new Player(options, this);
-        this.players.set(options.guildId, player);
-        return player; 
-    }
+	private createPlayer(options: PlayerOptions) {
+		const player = new Player(options, this);
+		this.players.set(options.guildId, player);
+		return player;
+	}
 
 	/**
 	 * Detects and routes the query to the correct source manager.
 	 * @param options The resolver's options.
 	 * @returns The appropriate source manager.
 	 */
-    public async resolve(options: ResolveOptions): Promise<ResolveResponse> {
-       if (options.query.match(this.soundCloudRegex) || this.options.defaultPlatform === 'soundcloud') {
-			console.log('Query matched!')
-			return await this.soundcloud.resolve(options.query);
-		}
-		if (options.query.match(this.deezerRegex) || this.options.defaultPlatform === 'deezer') 
-			return await this.deezer.resolve(options.query);
-    }
+	public async resolve(options: ResolveOptions): Promise<ResolveResponse> {
+		if (options.query.match(this.soundCloudRegex) || this.options.defaultPlatform === 'soundcloud')
+			return await this.soundcloud.resolve(options.query, options.requester);
+		if (options.query.match(this.spotifyRegex))
+			return await this.spotify.resolve(options.query, options.requester);
+		if (options.query.match(this.deezerRegex) || this.options.defaultPlatform === 'deezer')
+			return await this.deezer.resolve(options.query, options.requester);
+	}
 }
 
 interface Options {
@@ -81,7 +87,11 @@ interface Options {
         };
         soundcloud: {
             clientId: string;
-        }
+        };
+		spotify: {
+			clientId: string;
+			clientSecret: string;
+		};
     },
     defaultPlatform: Platform
 }
@@ -94,7 +104,7 @@ interface ResolveOptions {
     requester: unknown
 }
 
-/** The interface for all Disrupt events. */
+/** The interfaces for all Disrupt events. */
 export interface DisruptEvents {
 	/**
 	 * Emitted when a player starts playing a new track.
@@ -151,6 +161,7 @@ export interface ResolveResponse {
     info: Track | Album | Playlist;
 }
 
+// eslint-disable-next-line no-shadow
 export enum ResultTypes {
 	TRACK = 'track',
 	ALBUM = 'album',
