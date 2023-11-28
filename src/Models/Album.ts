@@ -49,7 +49,7 @@ type AlbumData = {
     duration: number;
     /** The array of tracks. */
     tracks: Track[];
-    /** The UPC of album (used to find it on other platforms. */
+    /** The UPC of album (used to find it on other platforms). */
     upc?: string;
     /** The source from where the album data was fetched from. */
     source: string;
