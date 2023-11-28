@@ -21,14 +21,14 @@ export class Album implements AlbumData {
 	/** The array of fetched tracks. */
 	public tracks: Track[];
 
-	constructor(data: AlbumData, source: string) {
+	constructor(data: AlbumData) {
 		this.id = data.id;
 		this.title = data.title;
 		this.artist = data.artist ?? null;
 		this.duration = data.duration;
 		this.uri = data.uri;
 		this.artworkUrl = data.artworkUrl;
-		this.source = source;
+		this.source = data.source;
 		this.tracks = data.tracks;
 		this.upc = data.upc;
 	}
