@@ -11,13 +11,16 @@ export class StreamDeployer {
 
 	constructor(disrupt: Manager) {
 		// TODO: Implement TIDAL, Apple Music and Spotify. Eventually at least.
-		this.dzUtils = new DeezerUtils(disrupt.options.sources.deezer.masterKey);
+		this.dzUtils = new DeezerUtils(
+			disrupt.options.sources.deezer.masterKey,
+			disrupt,
+			disrupt.options.sources.deezer.arl,
+		);
 		this.scClientId = disrupt.options.sources.soundcloud.clientId;
 	}
 
 	/**
 	 * Gets the platform-specific stream.
-	 * @private
 	 * @async
 	 * @param track The track object.
 	 * @param source The music service the query comes from.
@@ -29,13 +32,13 @@ export class StreamDeployer {
 			return await axios.get(`https://api.deezer.com/track/isrc:${track.isrc}`).then(async (res) => {
 				return await this.dzUtils.fetchMediaURL(res.data.id);
 			});
-
-			// case 'tidal':
-			// Yes, TIDAL will use Deezer as their API requires an account w/ subscription.
 		case 'deezer':
 			return await this.dzUtils.fetchMediaURL(track.id);
 		case 'soundcloud':
 			return await this.getSoundCloudTranscode(track.transcodedUrl);
+		case 'http':
+			console.log('HTTP Stream Deployer hit!');
+			return track.source;
 		}
 	}
 

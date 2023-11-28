@@ -1,8 +1,9 @@
-import axios from 'axios';
 import { Blowfish } from './Blowfish/BFLib';
-import { createHash } from 'node:crypto';
-import { Readable } from 'node:stream';
 import { FFmpeg, opus } from 'prism-media';
+import { createHash } from 'node:crypto';
+import { PassThrough } from 'stream';
+import { Manager } from '../Manager';
+import axios from 'axios';
 
 const instance = axios.create({
 	baseURL: 'https://api.deezer.com/1.0',
@@ -43,21 +44,49 @@ export class DeezerUtils {
 	/** The license token used to generate stream URLs. */
 	private licenseToken: string = null;
 
+	/** The IV used in the decryption process. */
+	private blowfishIV: Uint8Array = new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]);
+	/** The account ARL used to get access to higher quality audio. */
+	private arl?: string;
 
-	constructor(decryptionKey: string) {
+	/** The manager. */
+	private disrupt: Manager;
+
+	constructor(decryptionKey: string, disrupt: Manager, arl?: string) {
 		this.decryptionKey = decryptionKey;
+		this.disrupt = disrupt;
+		this.arl = arl;
 	}
 
 	/**
-     * Fetches the API key and license token needed for the API.
-     * @param arl The Deezer ARL that will be used to fetch higher quality tracks. (CURRENTLY NOT IMPLEMENTED)
-     */
-	private async fetchAPIKey(arl?: string) {
-		const sessionId = await instance.post(`${this.privateAPI}?method=deezer.ping&input=3&api_version=1.0&api_token=`);
-		instance.defaults.params.sid = (sessionId.data as SessionID).results.SESSION;
+	 * Builds the API request URL.
+	 *
+	 * @param {string} method - The API method name.
+	 * @private
+	 * @returns {string} The API request URL.
+	 */
+	private buildAPIRequest(method: string): string {
+		return `${this.privateAPI}?method=${method}&input=3&api_version=1.0&api_token=${instance.defaults.params.api_token}`;
+	}
 
-		const userToken = await instance.post(`${this.privateAPI}?method=deezer.getUserData&input=3&api_version=1.0&api_token=`);
+	/** Fetches the API key and license token needed from the API. */
+	private async fetchAPIKey() {
+		const headers = this.arl ? { 'Cookie': `arl=${this.arl}` } : undefined;
+		const sessionId = await instance.post(
+			this.buildAPIRequest('deezer.ping'),
+			'',
+			{ headers },
+		);
+		instance.defaults.params.sid = sessionId.data.results.SESSION;
+
+		const userToken = await instance.post(this.buildAPIRequest('deezer.getUserData'));
 		this.licenseToken = (userToken.data as LicenseToken).results.USER.OPTIONS.license_token;
+
+		// This'll check for the Web High Quality parameter in the API response.
+		// If it's false, fallback to 128kbps mode.
+		if (userToken.data.results.USER.OPTIONS.web_hq === true) {
+			this.disrupt.emit('debug', '[DISRUPT - DEBUG] >> User has access to HQ audio. Switching to 320kbps audio mode.');
+		}
 
 		this.apiKey = (userToken.data as LicenseToken).results.checkForm;
 		instance.defaults.params.api_token = this.apiKey;
@@ -68,102 +97,101 @@ export class DeezerUtils {
      * @param id The ID of the song.
      * @returns {Promise<opus.Encoder>} An Opus encoded stream.
      */
-	public async fetchMediaURL(id: string) {
+	public async fetchMediaURL(id: string): Promise<opus.Encoder> {
 		if (!instance.defaults.params.api_token || !instance.defaults.params.sid) await this.fetchAPIKey();
 
-		const trackTokenReq = await instance.post(`${this.privateAPI}?method=song.getData&input=3&api_version=1.0&api_token=`, {
+		const trackTokenReq = await instance.post(this.buildAPIRequest('song.getData'), {
 			'sng_id': id,
 		});
-		const trackToken = (trackTokenReq.data as TrackToken).results.TRACK_TOKEN;
+		const { TRACK_TOKEN, FILESIZE_MP3_320, SNG_ID } = (trackTokenReq.data as TrackToken).results;
 
 		const trackUrlReq = await instance.post('https://media.deezer.com/v1/get_url', {
 			license_token: this.licenseToken,
-			media: [
-				{
-					type: 'FULL',
-					formats: [
-						{
-							cipher: 'BF_CBC_STRIPE',
-							format: 'MP3_128',
-						},
-					],
-				},
-			],
-			track_tokens: [trackToken],
+			media: [{
+				type: 'FULL',
+				formats: [{
+					cipher: 'BF_CBC_STRIPE',
+					format: FILESIZE_MP3_320 !== 0 ? 'MP3_320' : 'MP3_128',
+				}],
+			}],
+			track_tokens: [TRACK_TOKEN],
 		});
 		const trackUrl = (trackUrlReq.data as TrackResponse).data[0].media[0].sources[0].url;
+		console.log(trackUrlReq.data.data[0].media[0]);
 
 		const streamData = await instance.get(trackUrl, { responseType: 'arraybuffer' });
-		const decryptedTrack = await this.decrypt(streamData.data, (trackTokenReq.data as TrackToken).results.SNG_ID);
+		const decryptedTrack = await this.decrypt(streamData.data, SNG_ID);
 		return this.makeOpusStream(decryptedTrack);
 	}
 
 	/**
      * Decrypts the provided chunk using the Blowfish key.
      * @private
+	 * @param id The track's ID used to generate the Blowfish decryption key for that specific track.
      * @param chunk The buffer or UInt8Array that's currently encrypted.
      * @returns {Uint8Array} The decrypted chunk as a Uint8Array.
      */
 	private decryptChunk(chunk: Buffer | Uint8Array, id: string): Uint8Array {
 		const blowfishKey = this.generateBlowfishKey(id);
 		const cipher = new Blowfish(blowfishKey, Blowfish.MODE.CBC, Blowfish.PADDING.NULL);
-		cipher.setIv(new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]));
+		cipher.setIv(this.blowfishIV);
 		return cipher.decode(chunk, Blowfish.TYPE.UINT8_ARRAY) as Uint8Array;
 	}
 
 	/**
-     * Generates the Blowfish decryption key using the current track's ID.
-     * @private
-     * @param {String} id The ID of the song that's currently playing.
-     * @returns The key used to decrypt chunks of the track.
-    */
+	 * Generates the Blowfish decryption key using the current track's ID.
+	 * @private
+	 * @param {String} id The ID of the song that's currently playing.
+	 * @returns The key used to decrypt chunks of the track.
+	 */
 	private generateBlowfishKey(id: string) {
 		const md5sum = createHash('md5').update(Buffer.from(id, 'binary')).digest('hex');
-		let bfKey = '';
-		for (let i = 0; i < 16; i++)
-			bfKey += String.fromCharCode(md5sum.charCodeAt(i) ^ md5sum.charCodeAt(i + 16) ^ this.decryptionKey.charCodeAt(i));
-		return String(bfKey);
+		const temp: string[] = [];
+
+		for (let i = 0; i < 16; i++) {
+			temp.push(String.fromCharCode(md5sum.charCodeAt(i) ^ md5sum.charCodeAt(i + 16) ^ this.decryptionKey.charCodeAt(i)));
+		}
+
+		return temp.join('');
 	}
 
 	/**
-     * Decrypts the song and returns the Opus-encoded stream.
-     * @private
-     * @param source The Blowfish encrypted buffer.
-     * @param trackId The ID of the track.
-     * @returns A decrypted MPEG readable stream.
-     */
+	 * Decrypts the song and returns the Opus-encoded stream.
+	 * @private
+	 * @param source The Blowfish encrypted buffer.
+	 * @param trackId The ID of the track.
+	 * @returns A decrypted MPEG readable stream.
+	 */
 	private async decrypt(source: Buffer, trackId: string) {
-		const decryptedBuffer = Buffer.alloc(source.length);
-		let chunkSize = 2048;
+		const bufferSize = 2048;
+		const finalStream = new PassThrough();
+		const encBuffer = Buffer.alloc(source.length);
 		let progress = 0;
 
 		while (progress < source.length) {
-			if ((source.length - progress) < 2048)
-				chunkSize = source.length - progress;
+			const isEndOfSource = (source.length - progress) < bufferSize;
+			const currentChunkSize = isEndOfSource ? source.length - progress : bufferSize;
+			let encryptedChunk = source.subarray(progress, progress + currentChunkSize);
 
-			let encryptedChunk = source.subarray(progress, progress + chunkSize);
-
-			if (progress % (chunkSize * 3) === 0 && chunkSize === 2048)
+			if (progress % (bufferSize * 3) === 0 && !isEndOfSource) {
 				encryptedChunk = Buffer.concat([this.decryptChunk(encryptedChunk, trackId)]);
+			}
 
-			decryptedBuffer.write(encryptedChunk.toString('binary'), progress, encryptedChunk.length, 'binary');
-			progress += chunkSize;
+			encBuffer.write(encryptedChunk.toString('binary'), progress, encryptedChunk.length, 'binary');
+			progress += currentChunkSize;
 		}
 
-		const stream = new Readable({
-			read() {},
-		});
-		stream.push(decryptedBuffer);
-
-		return stream;
+		finalStream.push(encBuffer);
+		return finalStream;
 	}
 
 	/**
      * Converts the MPEG readable stream to an Opus stream using prism-media.
      * @private
      * @param stream The MPEG readable stream.
+     * @returns {opus.Encoder} An Opus encoded stream.
      */
-	private makeOpusStream(stream: Readable) {
+	private makeOpusStream(stream: PassThrough): opus.Encoder {
 		const opusEncoder = new opus.Encoder({ rate: 48000, channels: 2, frameSize: 960 });
 		opusEncoder.setFEC(true);
 
@@ -171,12 +199,6 @@ export class DeezerUtils {
 		const opusStream = ffmpegPiped.pipe(opusEncoder);
 		return opusStream;
 	}
-}
-
-interface SessionID {
-    results: {
-        SESSION: string;
-    }
 }
 
 interface LicenseToken {
@@ -194,6 +216,7 @@ interface TrackToken {
     results: {
         SNG_ID: string;
         TRACK_TOKEN: string;
+		FILESIZE_MP3_320: number;
     }
 }
 
@@ -202,12 +225,10 @@ interface TrackResponse {
         {
             media: [
                 {
-                    sources: [
-                        {
-                            url: string;
-                            provider: string;
-                        }
-                    ]
+                    sources: {
+						url: string;
+						provider: string;
+					}[];
                 }
             ]
         }
