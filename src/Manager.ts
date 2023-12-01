@@ -1,5 +1,4 @@
-// import { Deezer, SoundCloud, Spotify, HTTP } from './Sources';
-import { Deezer, SoundCloud, Spotify } from './Sources';
+import { Deezer, SoundCloud, Spotify, HTTP, Bandcamp } from './Sources';
 import { DisruptError } from './Utils/DisruptError';
 import { Track, Album, Playlist } from './Models';
 import { Player, PlayerOptions } from './Player';
@@ -18,6 +17,8 @@ export class Manager extends EventEmitter {
 	private readonly soundCloudRegex: RegExp;
 	/** The regex used to detect Spotify links. */
 	private readonly spotifyRegex: RegExp;
+	/** The regex used to detect Bandcamp links. */
+	private readonly bandcampRegex: RegExp;
 
 	/** The SoundCloud source manager. */
 	private soundcloud: SoundCloud;
@@ -25,8 +26,10 @@ export class Manager extends EventEmitter {
 	private deezer: Deezer;
 	/** The Spotify source manager. */
 	private spotify: Spotify;
-	// /** The HTTP source manager. */
-	// private http: HTTP;
+	/** The HTTP source manager. */
+	private http: HTTP;
+	/** The Bandcamp source manager. */
+	private bandcamp: Bandcamp;
 
 	constructor(options: Options) {
 		super();
@@ -37,11 +40,13 @@ export class Manager extends EventEmitter {
 		this.soundcloud = new SoundCloud(this);
 		this.deezer = new Deezer();
 		this.spotify = new Spotify(this);
-		// this.http = new HTTP();
+		this.http = new HTTP();
+		this.bandcamp = new Bandcamp();
 
 		this.deezerRegex = /^(https?:\/\/?(www\.)?deezer\.com\/(?<countrycode>[a-zA-Z]{2}\/)?(?<type>track|album|playlist|artist)\/(?<identifier>[0-9]+))$/;
 		this.soundCloudRegex = /(https?:\/\/)?(www\.)?soundcloud\.com\/[^\s/]+(\/[^\s/]+)*\/?(\?[^#\s]*)?(#.*)?$/i;
 		this.spotifyRegex = /^(https:\/\/open\.spotify\.com\/(track|album|playlist)\/[a-zA-Z0-9]+)(\?si=[a-zA-Z0-9]+)?$/;
+		this.bandcampRegex = /https?:\/\/[\w-]+\.bandcamp\.com\/(track|album)\/[\w-]+/;
 	}
 
 	/**
@@ -73,15 +78,14 @@ export class Manager extends EventEmitter {
 	 * @returns The appropriate source manager.
 	 */
 	public async resolve(options: ResolveOptions): Promise<ResolveResponse> {
+		if (options.query.match(this.bandcampRegex))
+			return await this.bandcamp.resolve(options.query, options.requester);
 		if (options.query.match(this.soundCloudRegex) || this.options.defaultPlatform === 'soundcloud')
 			return await this.soundcloud.resolve(options.query, options.requester);
 		if (options.query.match(this.spotifyRegex))
 			return await this.spotify.resolve(options.query, options.requester);
-		// if (options.query.startsWith('http://') || options.query.startsWith('https://')) {
-		//	console.log('HTTP source manager hit!');
-		//	return await this.http.resolve(options.query, options.requester);
-		// }
-
+		 if (options.query.startsWith('http://') || options.query.startsWith('https://'))
+			return await this.http.resolve(options.query, options.requester);
 		if (options.query.match(this.deezerRegex) || this.options.defaultPlatform === 'deezer')
 			return await this.deezer.resolve(options.query, options.requester);
 	}
@@ -183,7 +187,7 @@ export declare interface Manager {
 
 export interface ResolveResponse {
     type: ResultTypes;
-    info: Track | Album | Playlist;
+    info: Track | Album | Playlist | {};
 }
 
 // eslint-disable-next-line no-shadow
@@ -192,4 +196,5 @@ export enum ResultTypes {
 	ALBUM = 'album',
 	PLAYLIST = 'playlist',
 	SEARCH = 'search',
+	EMPTY = 'empty',
 }
