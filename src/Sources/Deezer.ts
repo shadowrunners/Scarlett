@@ -1,5 +1,5 @@
-import { ResolveResponse, ResultTypes } from '../../Manager.js';
-import { DeezerBuilder } from '../../Utils/Builders';
+import { ResolveResponse, ResultTypes } from '../Manager';
+import { DeezerBuilder } from '../Utils/Builders';
 import axios from 'axios';
 
 export class Deezer {
