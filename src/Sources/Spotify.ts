@@ -1,6 +1,5 @@
 import { ResolveResponse, ResultTypes } from '../Manager';
 import { Album, Manager, Playlist, Track } from '../index';
-import { SpotifyBuilder } from '../Utils/Builders';
 import axios from 'axios';
 
 /** This is Disrupt's Spotify source manager. Used for resolving Spotify links. */
@@ -8,21 +7,14 @@ export class Spotify {
 	/** The manager instance. */
 	private disrupt: Manager;
 	/** The Spotify access token. */
-	private accessToken: string;
+	private accessToken: string = null;
 	/** The URL to Spotify's API. */
-	private readonly apiURL: string;
+	private readonly apiURL: string = 'https://api.spotify.com/v1';
 	/** The regex used to detect Spotify links. */
-	private readonly spotifyRegex: RegExp;
-	/** The builder class used to build track and album metadata. */
-	private builder: SpotifyBuilder;
+	private readonly spotifyRegex: RegExp = /^(https:\/\/open\.spotify\.com\/(track|album|playlist)\/[a-zA-Z0-9]+)(\?si=[a-zA-Z0-9]+)?$/;
 
 	constructor(disrupt: Manager) {
 		this.disrupt = disrupt;
-		this.builder = new SpotifyBuilder();
-		this.apiURL = 'https://api.spotify.com/v1';
-		this.accessToken = null;
-
-		this.spotifyRegex = /^(https:\/\/open\.spotify\.com\/(track|album|playlist)\/[a-zA-Z0-9]+)(\?si=[a-zA-Z0-9]+)?$/;
 	}
 
 	private async fetchAccessToken() {
@@ -65,56 +57,198 @@ export class Spotify {
 				type: ResultTypes.PLAYLIST,
 				info: await this.fetchPlaylist(id, requester) as Playlist,
 			};
-		default:
-			return {
-				type: ResultTypes.SEARCH,
-				info: await this.fetchQuery(query, requester) as Track,
-			};
 		}
 	}
 
-	private async fetchQuery(query: string, requester: unknown) {
-		const res = await axios.get(`${this.apiURL}/search?q=${encodeURIComponent(query)}&type=track&limit=3`, {
-			headers: {
-				Authorization: `Bearer ${this.accessToken}`,
-			},
-		});
-
-		const deezerRes = await axios.get(`https://api.deezer.com/track/isrc:${res.data.external_ids.isrc}`);
-		return this.builder.buildTrack(res.data.tracks.items[0], deezerRes.data.id, requester);
-	}
-
+	/**
+	 * Fetches the provided song from the Spotify API and builds it into a Disrupt Track.
+	 * @param query The provided song.
+	 * @param requester The person who requested the song.
+	 * @private
+	 */
 	private async fetchSong(query: string, requester: unknown) {
 		const res = await axios.get(`${this.apiURL}/tracks/${query}`, {
 			headers: {
 				Authorization: `Bearer ${this.accessToken}`,
 			},
-		});
+		}) as { data: APITrack };
 
-		const deezerRes = await axios.get(`https://api.deezer.com/track/isrc:${res.data.external_ids.isrc}`);
-		return this.builder.buildTrack(res.data, deezerRes.data.id, requester);
+		return new Track({
+			id: res.data.id,
+			artist: res.data.artists.map((artist) => `${artist.name}, `).toString(),
+			title: res.data.name,
+			isrc: res.data.external_ids.isrc,
+			uri: res.data.external_urls.spotify,
+			duration: res.data.duration_ms,
+			artworkUrl: res.data.images?.[0]?.url ?? res.data.album.images[0].url,
+			source: 'spotify',
+			requester,
+		});
 	}
 
+	/**
+	 * Fetches the provided album from the Spotify API and builds it into a Disrupt Album.
+	 * @param query The provided album.
+	 * @param requester The person who requested the album.
+	 * @private
+	 */
 	public async fetchAlbum(query: string, requester: unknown) {
 		const res = await axios.get(`${this.apiURL}/albums/${query}`, {
 			headers: {
 				Authorization: `Bearer ${this.accessToken}`,
 			},
-		});
+		}) as { data: APIAlbum };
 
-		const deezerRes = await axios.get(`https://api.deezer.com/album/upc:${res.data.external_ids.upc}`);
-		return this.builder.buildAlbum(res.data, deezerRes.data.id, requester);
+		return new Album({
+			id: res.data.id,
+			artist: res.data.artists.map((artist) => `${artist.name}, `).toString(),
+			title: res.data.name,
+			uri: res.data.external_urls.spotify,
+			duration: res.data.duration_ms,
+			artworkUrl: res.data.images[0].url,
+			tracks: res.data.tracks.map((track) => new Track({
+				id: track.id,
+				artist: track.artists.map((artist) => `${artist.name}, `).toString(),
+				title: track.name,
+				isrc: track.external_ids.isrc,
+				uri: track.external_urls.spotify,
+				duration: track.duration_ms,
+				artworkUrl: track.images?.[0]?.url ?? track.album.images[0].url,
+				source: 'spotify',
+				requester,
+			})),
+			source: 'spotify',
+		});
 	}
 
+	/**
+	 * Fetches the provided playlist from the Spotify API and builds it into a Disrupt Playlist.
+	 * @param id The playlist's ID.
+	 * @param requester The person who requested the song.
+	 * @private
+	 */
 	public async fetchPlaylist(id: string, requester: unknown) {
 		const res = await axios.get(`${this.apiURL}/playlists/${id}`, {
 			headers: {
 				Authorization: `Bearer ${this.accessToken}`,
 			},
-		});
+		}) as { data: APIPlaylist };
 
 		// TODO: Somehow lift the 100 song limit that the API imposes.
 
-		return this.builder.buildPlaylist(res.data, requester);
+		return new Playlist({
+			id: undefined,
+			title: res.data.name,
+			creator: res.data.owner.display_name,
+			uri: res.data.external_urls.spotify,
+			artworkUrl: res.data.images[0].url,
+			tracks: res.data.tracks.items.map((tData) => new Track({
+				id: tData.track.id,
+				artist: tData.track.artists.map((artist) => `${artist.name}, `).toString(),
+				title: tData.track.name,
+				isrc: tData.track.external_ids.isrc,
+				uri: tData.track.external_urls.spotify,
+				duration: tData.track.duration_ms,
+				artworkUrl: tData.track.images?.[0]?.url ?? tData.track.album.images[0].url,
+				source: 'spotify',
+				requester,
+			})),
+			source: 'spotify',
+		});
 	}
+}
+
+type APITrack = {
+	/** The song's ID. */
+	id: string;
+	/** The song's name. */
+	name: string;
+	/** The song's album object. */
+	album: {
+		/** The images object that contains URLs. */
+		images: {
+			/** The image's URL. */
+			url: string;
+		}[];
+	};
+	/** The song's external URLs. */
+	external_urls: {
+		/** The song's Spotify URL. */
+		spotify: string;
+	};
+	/** The song's external IDs. */
+	external_ids: {
+		/** The song's ISRC. */
+		isrc: string;
+	};
+	/** The song's artists array. */
+	artists: {
+		/** The artist's name. */
+		name: string;
+	}[];
+	/** The duration of the song (in ms). */
+	duration_ms: number;
+	/** The song's images array. */
+	images: {
+		/** The URL of the image. */
+		url: string;
+	}[];
+};
+
+type APIAlbum = {
+	/** The album's ID. */
+	id: string;
+	/** The album's name. */
+	name: string;
+	/** The album's external IDs. */
+	external_ids: {
+		/** The album's UPC. */
+		upc: string;
+	};
+	/** The album's external links. */
+	external_urls: {
+		/** The album's Spotify link. */
+		spotify: string;
+	};
+	/** The album's artists array. */
+	artists: {
+		/** The artist's name. */
+		name: string;
+	}[];
+	/** The duration of the album (in ms). */
+	duration_ms: number;
+	/** The album's images array. */
+	images: {
+		/** The URL of the image. */
+		url: string;
+	}[];
+	/** The album's track array. */
+	tracks: APITrack[];
+}
+
+type APIPlaylist = {
+	/** The playlist's name. */
+	name: string;
+	/** The playlist's external links. */
+	external_urls: {
+		/** The playlist's Spotify link. */
+		spotify: string;
+	};
+	/** The album's images array. */
+	images: {
+		/** The URL of the image. */
+		url: string;
+	}[];
+	/** The playlist's owner object. */
+	owner: {
+		/** The owner's display name. */
+		display_name: string;
+	};
+	/** The tracks object of the playlist. */
+	tracks: {
+		/** The tracks and their data. */
+		items: {
+			track: APITrack;
+		}[];
+	};
 }

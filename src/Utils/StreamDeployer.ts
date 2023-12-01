@@ -12,7 +12,7 @@ export class StreamDeployer {
 	private readonly SLRegex: RegExp = /https:\/\/t4\.bcbits\.com\/stream\/(?<hash1>[^/]+)\/mp3-128\/(?<hash2>[^?]+)\?p=0&amp;ts=(?<timestamp>\d+)&amp;t=(?<token>[^&]+)&amp;token=(?<token_timestamp>\d+)_(?<token_hash>[^&]+)/;
 
 	constructor(disrupt: Manager) {
-		// TODO: Implement TIDAL, Apple Music and Spotify. Eventually at least.
+		// TODO: Implement Apple Music. Eventually at least.
 		this.dzUtils = new DeezerUtils(
 			disrupt.options.sources.deezer.masterKey,
 			disrupt,

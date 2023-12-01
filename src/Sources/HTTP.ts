@@ -8,8 +8,6 @@ export class HTTP {
 		// Source is mostly going to be used for radio stations, therefore, fetch the ICECAST header data.
 		// This only handles AAC encoded playlist streams. No M3U8 stuff yet.
 
-		// TODO: Implement M3U8 support. (probably via query.contains('m3u8') -> use m3u8stream)
-
 		const res = await axios.get(query, { responseType: 'stream' });
 
 		return {
