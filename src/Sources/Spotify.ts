@@ -1,6 +1,6 @@
-import { ResolveResponse, ResultTypes } from '../../Manager.js';
-import { Album, Manager, Playlist, Track } from '../..';
-import { SpotifyBuilder } from '../../Utils/Builders';
+import { ResolveResponse, ResultTypes } from '../Manager';
+import { Album, Manager, Playlist, Track } from '../index';
+import { SpotifyBuilder } from '../Utils/Builders';
 import axios from 'axios';
 
 /** This is Disrupt's Spotify source manager. Used for resolving Spotify links. */

@@ -1,5 +1,5 @@
-import { Manager, ResolveResponse, ResultTypes } from '../../Manager.js';
-import { SoundCloudBuilder } from '../../Utils/Builders';
+import { Manager, ResolveResponse, ResultTypes } from '../Manager';
+import { SoundCloudBuilder } from '../Utils/Builders';
 import axios from 'axios';
 
 /** This is Disrupt's SoundCloud source manager. Used for resolving SoundCloud links. */

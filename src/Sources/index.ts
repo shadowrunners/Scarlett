@@ -1,6 +1,7 @@
-import { Deezer } from './Deezer/DeezerManager';
-import { Spotify } from './Spotify/SpotifyManager';
-import { SoundCloud } from './SoundCloud/SoundCloudManager';
+import { Deezer } from './Deezer';
+import { Spotify } from './Spotify';
+import { SoundCloud } from './SoundCloud';
 import { HTTP } from './HTTP';
+import { Bandcamp } from "./Bandcamp";
 
-export { Deezer, HTTP, Spotify, SoundCloud };
+export { Deezer, HTTP, Spotify, SoundCloud, Bandcamp };
