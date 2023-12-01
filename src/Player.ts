@@ -13,9 +13,6 @@ import { Manager } from '.';
 import Queue from './Queue';
 import { StreamDeployer } from './Utils/StreamDeployer';
 
-import m3u8stream from 'm3u8stream';
-import { Readable } from 'stream';
-
 /** This is Disrupt's Player class, it's where all the voice magic happens. */
 export class Player {
 	/** The voice player connection. */
@@ -89,7 +86,7 @@ export class Player {
 		const stream = await this.streamDeploy.deployStream({
 			track: this.queue.current,
 			source: this.queue.current.source,
-		}) as unknown as Readable | m3u8stream.Stream;
+		});
 
 		this.audioResource = createAudioResource(stream, {
 			inlineVolume: true,
