@@ -12,6 +12,7 @@ import {
 import { Manager } from '.';
 import Queue from './Queue';
 import { StreamDeployer } from './Utils/StreamDeployer';
+import { DisruptError } from './Utils/DisruptError';
 
 /** This is Disrupt's Player class, it's where all the voice magic happens. */
 export class Player {
@@ -32,6 +33,9 @@ export class Player {
 	public nowPlayingMessage: NowPlayingMessage;
 	/** The text channel. */
 	public textChannel: string;
+
+	/** The volume that the resource is currently playing at. */
+	public volume: number = 100;
 
 	/** The Stream Deployer class. Used to deploy the stream that will be played back via the player. */
 	private streamDeploy: StreamDeployer;
@@ -91,7 +95,7 @@ export class Player {
 		this.audioResource = createAudioResource(stream, {
 			inlineVolume: true,
 		});
-		this.audioResource.volume.setVolume(1.0);
+		this.audioResource.volume.setVolume(this.volume);
 		// TODO: Set the bitrate of the encoder to the bitrate of the channel.
 
 		this.player.play(this.audioResource);
@@ -126,6 +130,14 @@ export class Player {
 	public skip(): void {
 		this.player.stop(true);
 		this.play();
+	}
+
+	/** Sets the volume for the currently playing resource. */
+	public setVolume(volume: number): boolean {
+		if (volume < 0 || volume > 100) throw new DisruptError('Volume must be between 1-100.');
+
+		this.audioResource.volume.setVolume(volume / 100);
+		return true;
 	}
 
 	/** Destroys the player (connection). */
