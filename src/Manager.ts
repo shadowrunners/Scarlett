@@ -1,12 +1,11 @@
-import { EventEmitter } from 'node:events';
-import { Player, PlayerOptions } from './Player';
-import { Deezer } from './Sources/Deezer/DeezerManager';
-import { SoundCloud } from './Sources/SoundCloud/SoundCloudManager';
-import { Spotify } from './Sources/Spotify/SpotifyManager';
+// import { Deezer, SoundCloud, Spotify, HTTP } from './Sources';
+import { Deezer, SoundCloud, Spotify } from './Sources';
+import { DisruptError } from './Utils/DisruptError';
 import { Track, Album, Playlist } from './Models';
-// import { Spotify } from './Sources/Spotify/SpotifyManager';
+import { Player, PlayerOptions } from './Player';
+import { EventEmitter } from 'node:events';
 
-/** This is Disrupt's Manager class. It manages player creation and resolves using the appropriate source. */
+/** This is Disrupt's Manager class. It manages player creation and resolves to use the appropriate source. */
 export class Manager extends EventEmitter {
 	/** The manager's options. */
 	public options: Options;
@@ -17,8 +16,8 @@ export class Manager extends EventEmitter {
 	private readonly deezerRegex: RegExp;
 	/** The regex used to detect SoundCloud links. */
 	private readonly soundCloudRegex: RegExp;
-
-	spotifyRegex: RegExp;
+	/** The regex used to detect Spotify links. */
+	private readonly spotifyRegex: RegExp;
 
 	/** The SoundCloud source manager. */
 	private soundcloud: SoundCloud;
@@ -26,6 +25,8 @@ export class Manager extends EventEmitter {
 	private deezer: Deezer;
 	/** The Spotify source manager. */
 	private spotify: Spotify;
+	// /** The HTTP source manager. */
+	// private http: HTTP;
 
 	constructor(options: Options) {
 		super();
@@ -36,6 +37,7 @@ export class Manager extends EventEmitter {
 		this.soundcloud = new SoundCloud(this);
 		this.deezer = new Deezer();
 		this.spotify = new Spotify(this);
+		// this.http = new HTTP();
 
 		this.deezerRegex = /^(https?:\/\/?(www\.)?deezer\.com\/(?<countrycode>[a-zA-Z]{2}\/)?(?<type>track|album|playlist|artist)\/(?<identifier>[0-9]+))$/;
 		this.soundCloudRegex = /(https?:\/\/)?(www\.)?soundcloud\.com\/[^\s/]+(\/[^\s/]+)*\/?(\?[^#\s]*)?(#.*)?$/i;
@@ -75,15 +77,25 @@ export class Manager extends EventEmitter {
 			return await this.soundcloud.resolve(options.query, options.requester);
 		if (options.query.match(this.spotifyRegex))
 			return await this.spotify.resolve(options.query, options.requester);
+		// if (options.query.startsWith('http://') || options.query.startsWith('https://')) {
+		//	console.log('HTTP source manager hit!');
+		//	return await this.http.resolve(options.query, options.requester);
+		// }
+
 		if (options.query.match(this.deezerRegex) || this.options.defaultPlatform === 'deezer')
 			return await this.deezer.resolve(options.query, options.requester);
 	}
 }
 
 interface Options {
+	/** The configuration for the sources that Disrupt supports. */
     sources: {
+		/** The configuration for the Deezer source. */
         deezer: {
-            masterKey: string,
+			/** The master key used to decrypt tracks. */
+            masterKey: string;
+			/** The account ARL used to unlock higher quality audio. */
+			arl?: string;
         };
         soundcloud: {
             clientId: string;
@@ -93,7 +105,8 @@ interface Options {
 			clientSecret: string;
 		};
     },
-    defaultPlatform: Platform
+    defaultPlatform: Platform;
+	deleteNPMessageOnTrackEnd?: boolean;
 }
 
 type Platform = 'soundcloud' | 'deezer';
@@ -119,6 +132,12 @@ export interface DisruptEvents {
 	trackEnd: (player: Player, track: unknown) => void;
 
 	/**
+	 * Emitted when an error is encountered when playing a song.
+	 * @eventProperty
+	 */
+	trackError: (error: DisruptError) => void;
+
+	/**
 	 * Emitted when the player's queue has finished.
 	 * @eventProperty
 	 */
@@ -135,6 +154,12 @@ export interface DisruptEvents {
    	 * @eventProperty
      */
 	connectionTerminated: () => void;
+
+	/**
+	 * Emitted when the connection is destroyed.
+	 * @eventProperty
+	 */
+	debug: (log: unknown) => void;
 }
 
 export declare interface Manager {
