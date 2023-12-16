@@ -1,49 +1,41 @@
 import { ResolveResponse, ResultTypes } from '../Manager';
-import { DeezerBuilder } from '../Utils/Builders';
+import { Album, Playlist, Track } from '../Models';
 import axios from 'axios';
 
 export class Deezer {
 	/** The public APIs URL. */
 	private readonly publicAPI: string = 'https://api.deezer.com';
-	/** The Builder class used to build track data. */
-	private builder: DeezerBuilder;
-	/** The regex for standard Deezer links. */
-	private readonly deezerRegex: RegExp = /^(https?:\/\/)?deezer\.com\/(?<countrycode>[a-zA-Z]{2}\/)?(?<type>track|album|playlist|artist)\/(?<identifier>[0-9]+)/;
 	/** The regex for page.link links. */
 	private readonly pageLinkRegex: RegExp = /^(https?:\/\/)?deezer\.page\.link\/[a-zA-Z0-9]+$/;
 
-	constructor() {
-		this.builder = new DeezerBuilder();
-	}
-
 	/**
-     * Fetches the query based on the regex.
-     * @param query The link of the track / album / playlist or the query.
+	 * Fetches the query based on the regex.
+	 * @param query The link of the track / album / playlist or the query.
 	 * @param requester The person that requested the song.
-     * @returns The appropriate response.
-     */
+	 * @returns The appropriate response.
+	 */
 	public async resolve(query: string, requester: unknown): Promise<ResolveResponse> {
 		let songQuery: string;
 
 		if (query.match(this.pageLinkRegex)) songQuery = await this.resolveShareUrl(query);
 		else songQuery = query;
 
-		const identifier = songQuery.match(this.deezerRegex) || null;
-		switch (identifier?.groups?.type) {
+		const [type, id] = songQuery.split('/').slice(3, 5);
+		switch (type) {
 		case 'album':
 			return {
 				type: ResultTypes.ALBUM,
-				info: await this.fetchAlbum(identifier.groups.identifier, requester),
+				info: await this.fetchAlbum(id, requester),
 			};
 		case 'track':
 			return {
 				type: ResultTypes.TRACK,
-				info: await this.fetchSong(identifier.groups.identifier, requester),
+				info: await this.fetchSong(id, requester),
 			};
 		case 'playlist':
 			return {
 				type: ResultTypes.PLAYLIST,
-				info: await this.fetchPlaylist(identifier.groups.identifier, requester),
+				info: await this.fetchPlaylist(id, requester),
 			};
 		default:
 			return {
@@ -54,82 +46,147 @@ export class Deezer {
 	}
 
 	private async fetchQuery(query: string, requester: unknown) {
-		const res = await axios.get(`${this.publicAPI}/search?q=${encodeURIComponent(query)}`);
-		return this.builder.buildTrack((res.data as QueryResponse).data[0], requester);
+		const { data: { data: [queryData] } } = await axios.get<QueryResponse>(`${this.publicAPI}/search?q=${encodeURIComponent(query)}`);
+		if (!queryData) return { type: ResultTypes.EMPTY, info: {} };
+
+		const { data } = await axios.get<APITrack>(`${this.publicAPI}/track/${queryData.id}`);
+		return this.buildTrack(data, requester);
 	}
 
 	private async fetchSong(query: string, requester: unknown) {
-		const res = await axios.get(`${this.publicAPI}/track/${query}`);
-		return this.builder.buildTrack(res.data as APITrackResponse, requester);
+		const { data } = await axios.get<APITrack>(`${this.publicAPI}/track/${query}`);
+		return this.buildTrack(data, requester);
 	}
 
 	private async fetchAlbum(query: string, requester: unknown) {
-		const res = await axios.get(`${this.publicAPI}/album/${query}`);
-		return this.builder.buildAlbum(res.data as APIAlbum, requester);
+		const { data } = await axios.get<APIAlbum>(`${this.publicAPI}/album/${query}`);
+
+		return new Album({
+			id: data.id,
+			artist: data.artist.name,
+			title: data.title,
+			uri: data.link,
+			upc: data.upc,
+			duration: data.duration,
+			artworkUrl: data.cover_big,
+			tracks: data.tracks.data.map((track) => this.buildTrack(track, requester)),
+			source: 'deezer',
+		});
 	}
 
 	private async fetchPlaylist(query: string, requester: unknown) {
-		const res = await axios.get(`${this.publicAPI}/playlist/${query}`);
-		return this.builder.buildPlaylist(res.data as APIPlaylist, requester);
+		const { data } = await axios.get<APIPlaylist>(`${this.publicAPI}/playlist/${query}`);
+
+		return new Playlist({
+			id: data.id,
+			title: data.title,
+			creator: data.creator.name,
+			duration: data.duration,
+			uri: data.link,
+			artworkUrl: data.picture_big,
+			source: 'deezer',
+			tracks: data.tracks.data.map((track) => this.buildTrack(track, requester)),
+		});
 	}
 
 	private async resolveShareUrl(query: string) {
-		const res = await axios.get(query);
-		return `https://deezer.com${res.request.path}`;
+		const { request: { path } } = await axios.get(query);
+		return `https://deezer.com${path}`;
+	}
+
+	private buildTrack(track: APITrack, requester: unknown) {
+		return new Track({
+			id: track.id,
+			artist: track.artist.name,
+			title: track.title,
+			isrc: track.isrc,
+			uri: track.link,
+			duration: track.duration,
+			artworkUrl: this.buildArtworkUrl(track.md5_image),
+			source: 'deezer',
+			requester,
+		});
+	}
+
+	/**
+	 * Builds the URL of the track image.
+	 * @param hash The MD5 image hash from the Deezer API.
+	 * @returns The full URL to the artwork.
+	 */
+	private buildArtworkUrl(hash: string): string {
+		return `https://e-cdn-images.dzcdn.net/images/cover/${hash}/500x500-000000-80-0-0.jpg`;
 	}
 }
 
-interface QueryResponse {
-    data: {
-        id: string;
-        title: string;
-        link: string;
-        md5_image: string;
-        artist: {
-            name: string;
-        };
-        duration: number;
-    }[];
+type QueryResponse = {
+    data: { id: string; }[];
 }
 
-interface APITrackResponse {
-    id: string;
-    title: string;
-    link: string;
-    md5_image: string;
-    artist: {
-        name: string;
-    };
-    duration: number;
+type APITrack = {
+	/** The track's ID. */
+	id: string;
+	/** The object containing artist related information. */
+	artist: {
+		/** The name of the artist. */
+		name: string;
+	};
+	/** The name of the song. */
+	title: string;
+	/** The link to the song. */
+	link: string;
+	/** The MD5 hash of the artwork. */
+	md5_image: string;
+	/** The song's ISRC. */
+	isrc: string;
+	/** The duration of the song (in ms). */
+	duration: number;
 }
 
-interface APIAlbum {
-    id: string;
-    title: string;
-    cover_big: string;
-    link: string;
-    tracks: {
-        data: APITrackResponse[];
-    };
-    duration: number;
-    artist: {
-        name: string;
-    };
-    upc: string;
+type APIAlbum = {
+	/** The ID of the album. */
+	id: string;
+	/** The object containing artist related information. */
+	artist: {
+		/** The name of the artist that made the album. */
+		name: string;
+	};
+	/** The name of the album.. */
+	title: string;
+	/** The URL of the album. */
+	link: string;
+	/** The UPC of the album (similar to a track ISRC). */
+	upc: string;
+	/** The URL to the 500x500 artwork of the album. */
+	cover_big: string;
+	/** The duration of the album. (in ms) */
+	duration: number;
+	/** The tracks object of the album. */
+	tracks: {
+		/** The data of the tracks that are on the album. */
+		data: APITrack[];
+	};
 }
 
-interface APIPlaylist {
-    id: string;
-    title: string;
-    description: string;
-    duration: number;
-    link: string;
-    picture_big: string;
-    creator: {
-        name: string;
-    };
-    tracks: {
-        data: APITrackResponse[];
-    }
+type APIPlaylist = {
+	/** The playlist's ID. */
+	id: string;
+	/** The playlist's name. */
+	title: string;
+	/** The playlist's duration (in ms). */
+	duration: number;
+	/** The link to the playlist. */
+	link: string;
+	/** The link to the 500x500 artwork. */
+	picture_big: string;
+	/** The creator object. */
+	creator: {
+		/** The playlist creator's name. */
+		name: string;
+	};
+	/** The tracks object housing all the tracks and their data. */
+	tracks: {
+		/** The data of the tracks that are in the playlist. */
+		data: APITrack[];
+	};
 }
 
