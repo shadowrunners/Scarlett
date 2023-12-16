@@ -3,6 +3,7 @@ import { DisruptError } from './Utils/DisruptError';
 import { Track, Album, Playlist } from './Models';
 import { Player, PlayerOptions } from './Player';
 import { EventEmitter } from 'node:events';
+import { AppleMusic } from './Sources/AppleMusic';
 
 /** This is Disrupt's Manager class. It manages player creation and resolves to use the appropriate source. */
 export class Manager extends EventEmitter {
@@ -19,6 +20,8 @@ export class Manager extends EventEmitter {
 	private readonly spotifyRegex: RegExp;
 	/** The regex used to detect Bandcamp links. */
 	private readonly bandcampRegex: RegExp;
+	/** The regex used to detect Apple Music links. */
+	private readonly appleMusicRegex: RegExp;
 
 	/** The SoundCloud source manager. */
 	private soundcloud: SoundCloud;
@@ -30,6 +33,8 @@ export class Manager extends EventEmitter {
 	private http: HTTP;
 	/** The Bandcamp source manager. */
 	private bandcamp: Bandcamp;
+	/** The Apple Music source manager. */
+	private appleMusic: AppleMusic;
 
 	constructor(options: Options) {
 		super();
@@ -42,11 +47,13 @@ export class Manager extends EventEmitter {
 		this.spotify = new Spotify(this);
 		this.http = new HTTP();
 		this.bandcamp = new Bandcamp();
+		this.appleMusic = new AppleMusic(this);
 
 		this.deezerRegex = /^(https?:\/\/?(www\.)?deezer\.com\/(?<countrycode>[a-zA-Z]{2}\/)?(?<type>track|album|playlist|artist)\/(?<identifier>[0-9]+))$/;
 		this.soundCloudRegex = /(https?:\/\/)?(www\.)?soundcloud\.com\/[^\s/]+(\/[^\s/]+)*\/?(\?[^#\s]*)?(#.*)?$/i;
 		this.spotifyRegex = /^(https:\/\/open\.spotify\.com\/(track|album|playlist)\/[a-zA-Z0-9]+)(\?si=[a-zA-Z0-9]+)?$/;
 		this.bandcampRegex = /https?:\/\/[\w-]+\.bandcamp\.com\/(track|album)\/[\w-]+/;
+		this.appleMusicRegex = /https:\/\/music\.apple\.com\/[a-zA-Z]{2}\/(?:album|playlist)\/[a-zA-Z0-9]+(?:\?i=[a-zA-Z0-9]+)?/i;
 	}
 
 	/**
@@ -78,13 +85,15 @@ export class Manager extends EventEmitter {
 	 * @returns The appropriate source manager.
 	 */
 	public async resolve(options: ResolveOptions): Promise<ResolveResponse> {
+		if (options.query.match(this.appleMusicRegex))
+			return await this.appleMusic.resolve(options.query, options.requester);
 		if (options.query.match(this.bandcampRegex))
 			return await this.bandcamp.resolve(options.query, options.requester);
 		if (options.query.match(this.soundCloudRegex) || this.options.defaultPlatform === 'soundcloud')
 			return await this.soundcloud.resolve(options.query, options.requester);
 		if (options.query.match(this.spotifyRegex))
 			return await this.spotify.resolve(options.query, options.requester);
-		 if (options.query.startsWith('http://') || options.query.startsWith('https://'))
+		if (options.query.startsWith('http://') || options.query.startsWith('https://'))
 			return await this.http.resolve(options.query, options.requester);
 		if (options.query.match(this.deezerRegex) || this.options.defaultPlatform === 'deezer')
 			return await this.deezer.resolve(options.query, options.requester);
@@ -101,20 +110,27 @@ interface Options {
 			/** The account ARL used to unlock higher quality audio. */
 			arl?: string;
         };
+		/** The configuration for the SoundCloud source. */
         soundcloud: {
-            clientId: string;
+			/** The client ID used to interface with the SoundCloud API. */
+            clientId?: string;
         };
+		/** The configuration for the Spotify source. */
 		spotify: {
-			clientId: string;
-			clientSecret: string;
+			clientId?: string;
+			clientSecret?: string;
 		};
+		/** The configuration for the Apple Music source. */
+		appleMusic: {
+			/** The API token used to interface with the Apple Music API. */
+			mediaAPIToken?: string;
+		}
     },
     defaultPlatform: Platform;
 	deleteNPMessageOnTrackEnd?: boolean;
 }
 
 type Platform = 'soundcloud' | 'deezer';
-
 
 interface ResolveOptions {
     query: string,

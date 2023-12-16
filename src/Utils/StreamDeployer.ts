@@ -30,6 +30,7 @@ export class StreamDeployer {
 	 */
 	public async deployStream({ track, source }: { track: Track, source: string }): Promise<opus.Encoder | m3u8.Stream | string> {
 		switch (source) {
+		case 'applemusic':
 		case 'spotify':
 			return await axios.get(`https://api.deezer.com/track/isrc:${track.isrc}`).then(async (res) => {
 				return await this.dzUtils.fetchMediaURL(res.data.id);
