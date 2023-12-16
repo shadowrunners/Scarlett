@@ -9,7 +9,7 @@ export class Album implements AlbumData {
 	/** The artist of the album. (optional) */
 	public artist?: string;
 	/** The duration of the album. */
-	public duration: number;
+	public duration?: number;
 	/** The link to the album. */
 	public uri: string;
 	/** The URL to the artwork of the album. */
@@ -25,7 +25,7 @@ export class Album implements AlbumData {
 		this.id = data.id;
 		this.title = data.title;
 		this.artist = data.artist ?? null;
-		this.duration = data.duration;
+		this.duration = data.duration ?? null;
 		this.uri = data.uri;
 		this.artworkUrl = data.artworkUrl;
 		this.source = data.source;
@@ -46,7 +46,7 @@ type AlbumData = {
     /** The URL to the artwork of the album on the specific platform. */
     artworkUrl: string;
     /** The duration of the album. */
-    duration: number;
+    duration?: number;
     /** The array of tracks. */
     tracks: Track[];
     /** The UPC of album (used to find it on other platforms). */
