@@ -12,17 +12,6 @@ export class Manager extends EventEmitter {
 	/** The map of players. */
 	public players: Map<string, Player>;
 
-	/** The regex used to detect Deezer links. */
-	private readonly deezerRegex: RegExp;
-	/** The regex used to detect SoundCloud links. */
-	private readonly soundCloudRegex: RegExp;
-	/** The regex used to detect Spotify links. */
-	private readonly spotifyRegex: RegExp;
-	/** The regex used to detect Bandcamp links. */
-	private readonly bandcampRegex: RegExp;
-	/** The regex used to detect Apple Music links. */
-	private readonly appleMusicRegex: RegExp;
-
 	/** The SoundCloud source manager. */
 	private soundcloud: SoundCloud;
 	/** The Deezer source manager. */
@@ -42,18 +31,17 @@ export class Manager extends EventEmitter {
 		this.players = new Map();
 		this.options = options;
 
+		this.initializeSources();
+	}
+
+	/** Initializes all source managers. */
+	private initializeSources() {
 		this.soundcloud = new SoundCloud(this);
 		this.deezer = new Deezer();
 		this.spotify = new Spotify(this);
 		this.http = new HTTP();
 		this.bandcamp = new Bandcamp();
 		this.appleMusic = new AppleMusic(this);
-
-		this.deezerRegex = /^(https?:\/\/?(www\.)?deezer\.com\/(?<countrycode>[a-zA-Z]{2}\/)?(?<type>track|album|playlist|artist)\/(?<identifier>[0-9]+))$/;
-		this.soundCloudRegex = /(https?:\/\/)?(www\.)?soundcloud\.com\/[^\s/]+(\/[^\s/]+)*\/?(\?[^#\s]*)?(#.*)?$/i;
-		this.spotifyRegex = /^(https:\/\/open\.spotify\.com\/(track|album|playlist)\/[a-zA-Z0-9]+)(\?si=[a-zA-Z0-9]+)?$/;
-		this.bandcampRegex = /https?:\/\/[\w-]+\.bandcamp\.com\/(track|album)\/[\w-]+/;
-		this.appleMusicRegex = /https:\/\/music\.apple\.com\/[a-zA-Z]{2}\/(?:album|playlist)\/[a-zA-Z0-9]+(?:\?i=[a-zA-Z0-9]+)?/i;
 	}
 
 	/**
@@ -85,18 +73,35 @@ export class Manager extends EventEmitter {
 	 * @returns The appropriate source manager.
 	 */
 	public async resolve(options: ResolveOptions): Promise<ResolveResponse> {
-		if (options.query.match(this.appleMusicRegex))
-			return await this.appleMusic.resolve(options.query, options.requester);
-		if (options.query.match(this.bandcampRegex))
-			return await this.bandcamp.resolve(options.query, options.requester);
-		if (options.query.match(this.soundCloudRegex) || this.options.defaultPlatform === 'soundcloud')
-			return await this.soundcloud.resolve(options.query, options.requester);
-		if (options.query.match(this.spotifyRegex))
-			return await this.spotify.resolve(options.query, options.requester);
-		if (options.query.startsWith('http://') || options.query.startsWith('https://'))
-			return await this.http.resolve(options.query, options.requester);
-		if (options.query.match(this.deezerRegex) || this.options.defaultPlatform === 'deezer')
-			return await this.deezer.resolve(options.query, options.requester);
+		const { query, requester } = options;
+		const { defaultPlatform } = this.options;
+
+		if (query.startsWith('http://') || query.startsWith('https://')) {
+			const url = new URL(query);
+
+			switch (url.hostname) {
+			case 'music.apple.com':
+				return await this.appleMusic.resolve(query, requester);
+			case 'bandcamp.com':
+				return await this.bandcamp.resolve(query, requester);
+			case 'soundcloud.com':
+				return await this.soundcloud.resolve(query, requester);
+			case 'open.spotify.com':
+				return await this.spotify.resolve(query, requester);
+			case 'deezer.com':
+			case 'deezer.page.link':
+				return await this.deezer.resolve(query, requester);
+			default:
+				return await this.http.resolve(query, requester);
+			}
+		}
+
+		switch (defaultPlatform) {
+		case 'soundcloud':
+			return await this.soundcloud.resolve(query, requester);
+		case 'deezer':
+			return await this.deezer.resolve(query, requester);
+		}
 	}
 }
 
