@@ -7,14 +7,13 @@ export class SoundCloud {
 	/** The client ID used to call the API. */
 	private readonly clientId: string;
 	/** The URL of the API. */
-	private readonly apiURL: string;
+	private readonly apiURL: string = 'https://api-v2.soundcloud.com';
 	/** The builder class used to build track and album metadata. */
 	private builder: SoundCloudBuilder;
 	/** The regex used to detect SoundCloud links. */
 	private readonly scRegex: RegExp;
 
 	constructor(disrupt: Manager) {
-		this.apiURL = 'https://api-v2.soundcloud.com';
 		this.builder = new SoundCloudBuilder();
 		this.clientId = disrupt.options.sources.soundcloud.clientId;
 
@@ -22,11 +21,11 @@ export class SoundCloud {
 	}
 
 	/**
-     * Fetches the query based on the regex.
-     * @param query The link of the track / album / playlist or the query.
+	 * Fetches the query based on the regex.
+	 * @param query The link of the track / album / playlist or the query.
 	 * @param requester The person that requested the provided query.
-     * @returns The appropriate response.
-     */
+	 * @returns The appropriate response.
+	 */
 	public async resolve(query: string, requester: unknown): Promise<ResolveResponse> {
 		const identifier = query.match(this.scRegex) || null;
 
