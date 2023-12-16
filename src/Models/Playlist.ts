@@ -35,7 +35,7 @@ type PlaylistData = {
     creator: string;
     title: string;
     uri: string;
-	artworkUrl: string;
+		artworkUrl: string;
     duration?: number;
     source: string;
     tracks: Track[];
