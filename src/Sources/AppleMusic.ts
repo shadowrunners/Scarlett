@@ -1,5 +1,5 @@
 import { Manager, ResolveResponse, ResultTypes } from '../Manager';
-import { Album, Track } from '../Models';
+import { Album, Playlist, Track } from '../Models';
 import axios, { AxiosInstance } from 'axios';
 import { DisruptError } from '../Utils/DisruptError';
 
@@ -20,6 +20,7 @@ export class AppleMusic {
 			headers: {
 				'Authorization': `Bearer ${this.mediaAPIToken}`,
 				'origin': 'https://music.apple.com',
+				// just in case apple decides to do funny stuff
 				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
 			},
 		});
@@ -44,12 +45,24 @@ export class AppleMusic {
 		}
 	}
 
+	/**
+	 * Fetches the query based on the regex.
+	 * @param query The link of the track / album / playlist or the query.
+	 * @param requester The person that requested the song.
+	 * @returns The appropriate response.
+	 */
 	public async resolve(query: string, requester: unknown): Promise<ResolveResponse> {
 		const identifier = query.split('/');
 
 		const id = query.replace(/\?i=[a-zA-Z0-9]+/, '').split('/')[6];
 		switch (identifier[4]) {
+		case 'playlist':
+			return {
+				type: ResultTypes.PLAYLIST,
+				info: await this.fetchPlaylist(id, requester) as Playlist,
+			};
 		case 'album':
+			// This is also being used for normal tracks as Apple Music doesn't have song links. All songs are returned as albums.
 			return {
 				type: ResultTypes.ALBUM,
 				info: await this.fetchAlbum(id, requester) as Album,
@@ -57,90 +70,154 @@ export class AppleMusic {
 		}
 	}
 
-	public async fetchAlbum(query: string, requester: unknown) {
-		const res = await this.axios.get(`${this.apiURL}/albums/${query}`);
-		const data = res.data as AMAlbum;
+	private async fetchAlbum(query: string, requester: unknown) {
+		const { data: { data: [albumData] } } = await this.axios.get(`${this.apiURL}/albums/${query}`) as { data: AMAlbum };
 
-		const mappedTracks = data.data[0].relationships.tracks.data.map((track) => track);
-		const mappedTracksData = mappedTracks.map((track) => new Track({
-			id: track.id,
-			artist: track.attributes.artistName,
-			title: track.attributes.name,
-			isrc: track.attributes.isrc,
-			duration: track.attributes.durationInMillis,
-			artworkUrl: track.attributes.artwork.url.replace('{w}x{h}', '1000x1000'),
-			uri: track.attributes.url,
-			source: 'applemusic',
-			requester,
-		}));
+		const attributes = albumData.attributes;
+		const tracks = albumData.relationships.tracks.data;
+		const mappedTracks = this.mapTracks(tracks, requester);
 
 		return new Album({
-			id: data.data[0].id,
-			artist: data.data[0].attributes.artistName,
-			title: data.data[0].attributes.name,
-			uri: data.data[0].attributes.url,
-			upc: data.data[0].attributes.upc,
-			duration: undefined,
-			artworkUrl: data.data[0].attributes.artwork.url.replace('{w}x{h}', '1000x1000'),
-			tracks: mappedTracksData,
+			id: albumData.id,
+			artist: attributes.artistName,
+			title: attributes.name,
+			uri: attributes.url,
+			upc: attributes.upc,
+			artworkUrl: this.bakeArtworkURL(attributes.artwork.url),
+			tracks: mappedTracks,
 			source: 'applemusic',
 		});
+	}
+
+	private async fetchPlaylist(query: string, requester: unknown) {
+		const { data: { data: [playlistData] } } = await this.axios.get(`${this.apiURL}/playlists/${query}`) as { data: AMPlaylist };
+
+		const attributes = playlistData.attributes;
+		const tracks = playlistData.relationships.tracks.data;
+		const mappedTracks = this.mapTracks(tracks, requester);
+
+		return new Playlist({
+			id: playlistData.id,
+			creator: attributes.curatorName,
+			title: attributes.name,
+			uri: attributes.url,
+			artworkUrl: this.bakeArtworkURL(attributes.artwork.url),
+			tracks: mappedTracks,
+			source: 'applemusic',
+		});
+	}
+
+	/**
+	 * Maps the provided raw data into Disrupt Tracks.
+	 * @param tracks The raw track data.
+	 * @param requester The person who requested the track
+	 * @private An array of Disrupt Tracks.
+	 */
+	private mapTracks(tracks: AMTrack[], requester: unknown) {
+		return tracks.map((track) => {
+			const attributes = track.attributes;
+
+			return new Track({
+				id: track.id,
+				artist: attributes.artistName,
+				title: attributes.name,
+				isrc: attributes.isrc,
+				duration: attributes.durationInMillis,
+				artworkUrl: this.bakeArtworkURL(attributes.artwork.url),
+				uri: attributes.url,
+				source: 'applemusic',
+				requester,
+			});
+		});
+	}
+
+	/** Replaces the {w} and {h} parameters of the URL with actual resolution values. */
+	private bakeArtworkURL(baseURL: string) {
+		return baseURL.replace('{w}x{h}', '1000x1000');
 	}
 }
 
 type AMAlbum = {
-    data: [{
-		/** The album's ID. */
-		id: string;
-		attributes: {
-			/** The album's UPC. */
-			upc: string;
-			/** The artist information. */
-			artwork: {
-				/** The artist's name. */
+		/** The array containing all the data about the album. */
+    data: {
+			/** The album's ID. */
+			id: string;
+			/** The object containing all the attributes such as name, UPC, etc. */
+			attributes: {
+				/** The name of the album. */
+				name: string;
+				/** The name of the artist(s) that made the album. */
+				artistName: string;
+				/** The album's UPC. */
+				upc: string;
+				/** The object containing all artwork related information. */
+				artwork: {
+					/** The URL of the artwork. */
+					url: string;
+				};
+				/** The URL of the album. */
 				url: string;
-			};
-			url: string;
-			name: string;
-			artistName: string;
-		}
-		relationships: {
-			/** The track array. */
-			tracks: {
-				data: AMAlbumTrack[];
 			}
-		}
-	}]
+			/** The object containing the album's tracks. */
+			relationships: {
+				/** The object containing the array of tracks that are on the album. */
+				tracks: {
+					/** The array of tracks that are on the album. */
+					data: AMTrack[];
+				}
+			}
+		}[];
 }
 
-type AMAlbumTrack = {
+type AMTrack = {
+	/** The ID of the track. */
 	id: string;
+	/** The object containing all the attributes such as name, UPC, etc. */
 	attributes: {
+		/** The name of the artist(s) that made the song. */
+		artistName: string;
+		/** The name of the track. */
+		name: string;
+		/** The duration of the track in milliseconds. */
+		durationInMillis: number;
+		/** The ISRC of the track. */
 		isrc: string;
+		/** The object containing all artwork related information. */
 		artwork: {
-			/** The artist's name. */
+			/** The URL of the artwork. */
 			url: string;
 		};
+		/** The URL of the track. */
 		url: string;
-		name: string;
-		artistName: string;
-		durationInMillis: number;
 	}
 };
 
-type AMTrack = {
+type AMPlaylist = {
+	/** The array containing all the data about the playlist. */
 	data: {
+		/** The playlist's ID. */
 		id: string;
+		/** The object containing all the attributes such as name, curator, etc. */
 		attributes: {
-			isrc: string;
-			artwork: {
-				/** The artist's name. */
-				url: string;
-			};
-			url: string;
+			/** The name of the playlist. */
 			name: string;
-			artistName: string;
-			durationInMillis: number;
+			/** The name of the person that made the playlist. */
+			curatorName: string;
+			/** The object containing all artwork related information. */
+			artwork: {
+				/** The URL of the artwork. */
+				url: string;
+			}
+			/** The URL of the playlist. */
+			url: string;
+		}
+		/** The object containing the album's tracks. */
+		relationships: {
+			/** The object containing the array of tracks that are on the album. */
+			tracks: {
+				/** The array of tracks that are on the album. */
+				data: AMTrack[];
+			}
 		}
 	}[];
-};
+}
