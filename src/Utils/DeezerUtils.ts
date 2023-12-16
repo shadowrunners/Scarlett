@@ -3,37 +3,21 @@ import { FFmpeg, opus } from 'prism-media';
 import { createHash } from 'node:crypto';
 import { PassThrough } from 'stream';
 import { Manager } from '../Manager';
-import axios from 'axios';
-
-const instance = axios.create({
-	baseURL: 'https://api.deezer.com/1.0',
-	withCredentials: true,
-	timeout: 15000,
-	headers: {
-		Accept: '*/*',
-		'Accept-Encoding': 'gzip, deflate',
-		'Accept-Language': 'en-US',
-		'Cache-Control': 'no-cache',
-		'Content-Type': 'application/json; charset=UTF-8',
-		'User-Agent': 'Deezer/8.32.0.2 (iOS; 14.4; Mobile; en; iPhone10_5)',
-	},
-	params: {},
-});
-
-const ffmpeg = new FFmpeg({
-	args: [
-		'-analyzeduration', '0',
-		'-loglevel', '0',
-		'-f', 's16le',
-		'-ar', '48000',
-		'-ac', '2',
-	],
-});
+import axios, { AxiosInstance } from 'axios';
+import { DisruptError } from './DisruptError';
 
 /** The utilities built for the Deezer source. */
 export class DeezerUtils {
 	/** The FFmpeg instance. */
-	private readonly ffmpeg: FFmpeg = ffmpeg;
+	private readonly ffmpeg: FFmpeg = new FFmpeg({
+		args: [
+			'-analyzeduration', '0',
+			'-loglevel', '0',
+			'-f', 's16le',
+			'-ar', '48000',
+			'-ac', '2',
+		],
+	});
 	/** The URL of Deezer's Private API. */
 	private readonly privateAPI: string = 'https://www.deezer.com/ajax/gw-light.php';
 	/** The decryption key used to decrypt tracks. */
@@ -51,6 +35,20 @@ export class DeezerUtils {
 
 	/** The manager. */
 	private disrupt: Manager;
+	/** The Axios instance used to contact the Deezer API. */
+	private axios: AxiosInstance = axios.create({
+		baseURL: 'https://api.deezer.com/1.0',
+		withCredentials: true,
+		headers: {
+			Accept: '*/*',
+			'Accept-Encoding': 'gzip, deflate',
+			'Accept-Language': 'en-US',
+			'Cache-Control': 'no-cache',
+			'Content-Type': 'application/json; charset=UTF-8',
+			'User-Agent': 'Deezer/8.32.0.2 (iOS; 14.4; Mobile; en; iPhone10_5)',
+		},
+		params: {},
+	});
 
 	constructor(decryptionKey: string, disrupt: Manager, arl?: string) {
 		this.decryptionKey = decryptionKey;
@@ -66,21 +64,17 @@ export class DeezerUtils {
 	 * @returns {string} The API request URL.
 	 */
 	private buildAPIRequest(method: string): string {
-		return `${this.privateAPI}?method=${method}&input=3&api_version=1.0&api_token=${instance.defaults.params.api_token}`;
+		return `${this.privateAPI}?method=${method}&input=3&api_version=1.0&api_token=${this.axios.defaults.params.api_token}`;
 	}
 
 	/** Fetches the API key and license token needed from the API. */
 	private async fetchAPIKey() {
 		const headers = this.arl ? { 'Cookie': `arl=${this.arl}` } : undefined;
-		const sessionId = await instance.post(
-			this.buildAPIRequest('deezer.ping'),
-			'',
-			{ headers },
-		);
-		instance.defaults.params.sid = sessionId.data.results.SESSION;
+		const sessionId = await this.axios.post<Session>(this.buildAPIRequest('deezer.ping'), '', { headers });
+		this.axios.defaults.params.sid = sessionId.data.results.SESSION;
 
-		const userToken = await instance.post(this.buildAPIRequest('deezer.getUserData'));
-		this.licenseToken = (userToken.data as LicenseToken).results.USER.OPTIONS.license_token;
+		const userToken = await this.axios.post<LicenseToken>(this.buildAPIRequest('deezer.getUserData'));
+		this.licenseToken = userToken.data.results.USER.OPTIONS.license_token;
 
 		// This'll check for the Web High Quality parameter in the API response.
 		// If it's false, fallback to 128kbps mode.
@@ -88,49 +82,54 @@ export class DeezerUtils {
 			this.disrupt.emit('debug', '[DISRUPT - DEBUG] >> User has access to HQ audio. Switching to 320kbps audio mode.');
 		}
 
-		this.apiKey = (userToken.data as LicenseToken).results.checkForm;
-		instance.defaults.params.api_token = this.apiKey;
+		this.apiKey = userToken.data.results.checkForm;
+		this.axios.defaults.params.api_token = this.apiKey;
 	}
 
 	/**
-     * Fetches the media URL of the track.
-     * @param id The ID of the song.
-     * @returns {Promise<opus.Encoder>} An Opus encoded stream.
-     */
+   * Fetches the media URL of the track.
+	 * @param id The ID of the song.
+   * @returns {Promise<opus.Encoder>} An Opus encoded stream.
+   */
 	public async fetchMediaURL(id: string): Promise<opus.Encoder> {
-		if (!instance.defaults.params.api_token || !instance.defaults.params.sid) await this.fetchAPIKey();
+		const localAxios = this.axios;
+		if (!this.axios.defaults.params.api_token || !this.axios.defaults.params.sid) await this.fetchAPIKey();
 
-		const trackTokenReq = await instance.post(this.buildAPIRequest('song.getData'), {
+		const { data: { results: { TRACK_TOKEN, FILESIZE_MP3_320, SNG_ID } } } = await this.axios.post<TrackToken>(this.buildAPIRequest('song.getData'), {
 			'sng_id': id,
 		});
-		const { TRACK_TOKEN, FILESIZE_MP3_320, SNG_ID } = (trackTokenReq.data as TrackToken).results;
 
-		const trackUrlReq = await instance.post('https://media.deezer.com/v1/get_url', {
-			license_token: this.licenseToken,
-			media: [{
-				type: 'FULL',
-				formats: [{
-					cipher: 'BF_CBC_STRIPE',
-					format: FILESIZE_MP3_320 !== 0 ? 'MP3_320' : 'MP3_128',
+		let trackUrlReq: axios.AxiosResponse<TrackResponse>;
+		try {
+			trackUrlReq = await localAxios.post<TrackResponse>('https://media.deezer.com/v1/get_url', {
+				license_token: this.licenseToken,
+				media: [{
+					type: 'FULL',
+					formats: [{
+						cipher: 'BF_CBC_STRIPE',
+						format: parseInt(FILESIZE_MP3_320) > 0 ? 'MP3_320' : 'MP3_128',
+					}],
 				}],
-			}],
-			track_tokens: [TRACK_TOKEN],
-		});
-		const trackUrl = (trackUrlReq.data as TrackResponse).data[0].media[0].sources[0].url;
-		console.log(trackUrlReq.data.data[0].media[0]);
+				track_tokens: [TRACK_TOKEN],
+			});
+		}
+		catch (_err) {
+			throw new DisruptError('Cannot fetch Deezer Media URL. This usually happens when your ARL is no longer valid and Disrupt tries to fetch a 320kbps or higher media URL. If this persists, open an issue on GitHub or join our Discord support server. (DZ:FETCH_MEDIAURL_ERR)');
+		}
 
-		const streamData = await instance.get(trackUrl, { responseType: 'arraybuffer' });
-		const decryptedTrack = await this.decrypt(streamData.data, SNG_ID);
+		const trackUrl = trackUrlReq.data.data[0].media[0].sources[0].url;
+		const { data: mediaURL } = await localAxios.get(trackUrl, { responseType: 'arraybuffer' });
+		const decryptedTrack = await this.decrypt(mediaURL, SNG_ID);
 		return this.makeOpusStream(decryptedTrack);
 	}
 
 	/**
-     * Decrypts the provided chunk using the Blowfish key.
-     * @private
+   * Decrypts the provided chunk using the Blowfish key.
+   * @private
 	 * @param id The track's ID used to generate the Blowfish decryption key for that specific track.
-     * @param chunk The buffer or UInt8Array that's currently encrypted.
-     * @returns {Uint8Array} The decrypted chunk as a Uint8Array.
-     */
+   * @param chunk The buffer or UInt8Array that's currently encrypted.
+   * @returns {Uint8Array} The decrypted chunk as a Uint8Array.
+	 */
 	private decryptChunk(chunk: Buffer | Uint8Array, id: string): Uint8Array {
 		const blowfishKey = this.generateBlowfishKey(id);
 		const cipher = new Blowfish(blowfishKey, Blowfish.MODE.CBC, Blowfish.PADDING.NULL);
@@ -206,6 +205,7 @@ interface LicenseToken {
         USER: {
             OPTIONS: {
                 license_token: string;
+								web_hq: boolean;
             },
         },
         checkForm: string;
@@ -216,7 +216,7 @@ interface TrackToken {
     results: {
         SNG_ID: string;
         TRACK_TOKEN: string;
-		FILESIZE_MP3_320: number;
+				FILESIZE_MP3_320: string;
     }
 }
 
@@ -226,11 +226,18 @@ interface TrackResponse {
             media: [
                 {
                     sources: {
-						url: string;
-						provider: string;
-					}[];
+											url: string;
+											provider: string;
+										}[];
                 }
             ]
         }
     ]
+}
+
+type Session = {
+	results: {
+		SESSION: string;
+		checkForm: string;
+	}
 }
