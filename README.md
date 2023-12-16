@@ -7,10 +7,10 @@ Disrupt currently supports:
 - SoundCloud (native)
 - Bandcamp (native)
 - Spotify (only metadata is fetched from Spotify, audio comes from Deezer)
-- HTTP streams (possibly no M3U8 support yet)
+- HTTP streams
+- Apple Music (via Deezer)
 
 Sources that are coming:
-- Apple Music (via Deezer)
 - Pandora Music
 
 ## Installation
